@@ -9,9 +9,9 @@
       300,
       300
     ],
-    "original_bytes": 87543,
-    "preview_bytes": 17845,
-    "source_sha256": "59659119b36abf58f1410e69047dc9ed788024e2569428c137086f4ce0d0370c"
+    "original_bytes": 71319,
+    "preview_bytes": 14272,
+    "source_sha256": "5c7a97b3cb006aa18e18b893fca21044758a68a2abb5d7acb6dc0ec0d8703fb1"
   },
   {
     "name": "Blue",
@@ -23,9 +23,9 @@
       300,
       300
     ],
-    "original_bytes": 91409,
-    "preview_bytes": 19296,
-    "source_sha256": "3b87ca52160e078f78c27070e91fedd054d6ca2a99d4d11352bc8b3c31628bcb"
+    "original_bytes": 74264,
+    "preview_bytes": 15625,
+    "source_sha256": "767b0b31eb2dbecb7f95c652a01bf868251eee1e1a6b3943e7a1adda11c44a05"
   },
   {
     "name": "Graphite",
@@ -37,8 +37,8 @@
       300,
       300
     ],
-    "original_bytes": 87555,
-    "preview_bytes": 17735,
-    "source_sha256": "fd4f1e5e7cec701078dc21cf660e291fdb4140229cb10bcb4c3311ef5ed6e1c0"
+    "original_bytes": 71399,
+    "preview_bytes": 14333,
+    "source_sha256": "5b18ed38eed1fa56fc2fa5fb1e6296aca03e0a4911c92d0e5afdcbc1dfa8a3e4"
   }
 ]

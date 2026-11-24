@@ -74,7 +74,7 @@ def render_icon(size, bg, palette, scale=0.68, ss=4, overrides=None):
     return img.resize((size, size), Image.LANCZOS)
 
 
-def render_svg(size, bg, palette, scale=0.68):
+def render_svg(size, bg, palette, scale=0.54):
     k = (size * scale) / W_ORIG
     tx = size / 2.0 - CX_ORIG * k
     ty = size / 2.0 - CY_ORIG * k
@@ -113,7 +113,7 @@ def main():
     manifest = []
     for name, (bg, pal) in full.items():
         out_path = BRANDING / f"{name}.png"
-        render_icon(1254, bg, pal, scale=0.68).convert("RGB").save(out_path, optimize=True)
+        render_icon(1254, bg, pal, scale=0.54).convert("RGB").save(out_path, optimize=True)
         prev_path = PREVIEWS / f"{name}.png"
         Image.open(out_path).resize((300, 300), Image.LANCZOS).save(prev_path, optimize=True)
         manifest.append({
@@ -132,10 +132,10 @@ def main():
     }
     for name, bg in glass.items():
         render_bg(1024, bg).convert("RGB").save(BRANDING / f"{name}-Background.png", optimize=True)
-        render_icon(1024, None, ("#FFFFFF", "#E2E4EC", "#C2C6D4"), scale=0.68).save(
+        render_icon(1024, None, ("#FFFFFF", "#E2E4EC", "#C2C6D4"), scale=0.54).save(
             BRANDING / f"{name}-Logo.png", optimize=True
         )
-        render_icon(256, bg, ("#FFFFFF", "#E2E4EC", "#C2C6D4"), scale=0.68).convert("RGB").save(
+        render_icon(256, bg, ("#FFFFFF", "#E2E4EC", "#C2C6D4"), scale=0.54).convert("RGB").save(
             BRANDING / f"{name}-Preview.png", optimize=True
         )
 
@@ -154,7 +154,7 @@ def main():
     }
 
     for name, (bg, pal, overrides) in classic_styles.items():
-        img = render_icon(1024, bg, pal, scale=0.68, overrides=overrides).convert("RGB")
+        img = render_icon(1024, bg, pal, scale=0.54, overrides=overrides).convert("RGB")
         if name == "Win95":
             img = img.resize((64, 64), Image.BOX).resize((1024, 1024), Image.NEAREST)
         out = CLASSIC / f"{name}.png"
@@ -169,7 +169,7 @@ def main():
         render_svg(1024, None, ("#FFFFFF", "#D6D7DC", "#B9BCC5"), scale=0.80)
     )
     (BRANDING / "VoidGram-icon.svg").write_text(
-        render_svg(1024, ("#141416", "#050506"), ("#FFFFFF", "#D6D7DC", "#B9BCC5"), scale=0.68)
+        render_svg(1024, ("#141416", "#050506"), ("#FFFFFF", "#D6D7DC", "#B9BCC5"), scale=0.54)
     )
     render_icon(480, None, ("#FFFFFF", "#D6D7DC", "#B9BCC5"), scale=0.80).save(
         WELCOME / "VoidGramWelcomeLogo@3x.png", optimize=True
