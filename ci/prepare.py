@@ -221,6 +221,10 @@ def apply_nowzen_branding(src: Path):
             text,
             flags=re.S,
         )
+        text = text.replace(
+            "controller.contentOffsetChanged = { [weak controller] offset, _ in",
+            "controller.contentOffsetChanged = { offset, _ in",
+        )
         main_ctrl.write_text(text, encoding="utf-8")
 
     # 4. Update AyuAppIconCatalog.swift with all 16 Nowzen colorways
