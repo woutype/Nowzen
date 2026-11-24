@@ -115,27 +115,23 @@ jobs:
           path: ${{ runner.temp }}/ayu-bazel-cache
           key: nowzen-bazel-${{ env.CONFIGURATION }}-${{ hashFiles('upstream.json') }}-${{ github.sha }}
 
-      - name: TrollStore package
-        if: success() && hashFiles('telegram/artifacts/port/*.ipa') != ''
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          brew install ldid
-          ipa=$(ls telegram/artifacts/port/*.ipa | head -n 1)
-          python3 ci/trollstore.py "$ipa" "${ipa%.ipa}-TrollStore.tipa" com.woutype.nowzen.ios NOWZENCI
-
       - name: Show errors on the run page
         if: failure()
         run: python3 ci/annotate_failure.py "Nowzen build failed" "$RUNNER_TEMP/ayu-checks.log" telegram/artifacts/port/build.log
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+        if: success()
         with:
           name: Nowzen-ios-${{ env.CONFIGURATION }}-unsigned-${{ github.run_number }}
+          path: telegram/artifacts/port/Nowzen.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: Nowzen-ios-logs-${{ github.run_number }}
           path: |
-            telegram/artifacts/port/*.ipa
-            telegram/artifacts/port/*.tipa
-            telegram/artifacts/port/manifest.json
             telegram/artifacts/port/build.log
             ${{ runner.temp }}/ayu-tests.log
           if-no-files-found: ignore
