@@ -1,4 +1,4 @@
-name: Nowzen iOS Build & Release
+name: Nowzen iOS Build
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
         default: true
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
   attestations: write
 
@@ -140,37 +140,6 @@ jobs:
             ${{ runner.temp }}/ayu-tests.log
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Publish GitHub Release
-        if: success() && hashFiles('telegram/artifacts/port/*.ipa') != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: 1.0.${{ github.run_number }}
-        run: |
-          set -euo pipefail
-          mkdir -p release-files
-          ipa=$(ls telegram/artifacts/port/*.ipa | head -n 1)
-          cp "$ipa" "release-files/Nowzen-v${VERSION}.ipa"
-          tipa=$(ls telegram/artifacts/port/*.tipa | head -n 1 || true)
-          if [ -n "$tipa" ]; then
-            cp "$tipa" "release-files/Nowzen-v${VERSION}-TrollStore.tipa"
-          fi
-          {
-            echo "## Nowzen v${VERSION}"
-            echo ""
-            echo "iOS build #${{ github.run_number }} from commit \`${GITHUB_SHA}\` (\`${CONFIGURATION}\`)."
-            echo ""
-            echo "| File | Size | SHA-256 |"
-            echo "|---|---|---|"
-            for f in release-files/*; do
-              echo "| $(basename "$f") | $(stat -f%z "$f" | awk '{printf "%.2f MiB", $1/1048576}') | \`$(shasum -a 256 "$f" | cut -d' ' -f1)\` |"
-            done
-          } > release-notes.md
-          gh release create "v${VERSION}" release-files/* \
-            --target "$GITHUB_SHA" \
-            --title "Nowzen v${VERSION}" \
-            --notes-file release-notes.md \
-            --latest
 
       - name: Attest the IPA
         if: success() && hashFiles('telegram/artifacts/port/*.ipa') != ''
