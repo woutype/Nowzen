@@ -98,7 +98,6 @@
   "submodules/SettingsUI/Sources/AyuDecoySettingsController.swift",
   "submodules/SettingsUI/Sources/AyuDesktopImport.swift",
   "submodules/SettingsUI/Sources/AyuDeveloperSettingsController.swift",
-  "submodules/SettingsUI/Sources/AyuEblanButton.swift",
   "submodules/SettingsUI/Sources/AyuEqualizerController.swift",
   "submodules/SettingsUI/Sources/AyuExtrasController.swift",
   "submodules/SettingsUI/Sources/AyuGhostExceptionsController.swift",
@@ -272,7 +271,5 @@
   "submodules/TelegramUI/Sources/AyuUserLyrics.swift",
   "submodules/TelegramUIPreferences/Sources/AyuPowerSaving.swift",
   "submodules/SettingsUI/Sources/AyuPlayerNightLookController.swift",
-  "submodules/TelegramUIPreferences/Sources/AyuPlayerNightLook.swift",
-  "submodules/SettingsUI/Sources/AyuNatsukinMusic.swift",
-  "submodules/TelegramUI/Resources/NatsukinMusic.mp3"
+  "submodules/TelegramUIPreferences/Sources/AyuPlayerNightLook.swift"
 ]

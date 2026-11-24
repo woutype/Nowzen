@@ -55,7 +55,7 @@ def sign(binary, entitlements=None):
 
 
 def main(ipa, output, app_bundle_id, team_id):
-    with tempfile.TemporaryDirectory(prefix="voidgram-tipa-") as folder:
+    with tempfile.TemporaryDirectory(prefix="nowzen-tipa-") as folder:
         root = Path(folder)
         with zipfile.ZipFile(ipa) as archive:
             archive.extractall(root)

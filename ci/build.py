@@ -58,8 +58,8 @@ else:
     print("::warning::No own Telegram API credentials: compilation-only artifact, login unavailable")
 
 configuration = json.loads((source / "build-system/template_minimal_development_configuration.json").read_text())
-configuration.update(bundle_id="one.ayugram.unofficial.ios", api_id=api_id, api_hash=api_hash,
-                     team_id="AYUCOMPILE", app_specific_url_scheme="ayugram", is_internal_build="false")
+configuration.update(bundle_id="com.woutype.nowzen.ios", api_id=api_id, api_hash=api_hash,
+                     team_id="NOWZENCI", app_specific_url_scheme="nowzen", is_internal_build="false")
 temp = Path(os.environ.get("RUNNER_TEMP", "/tmp"))
 config_path = temp / "ayu-compilation-configuration.json"
 config_path.write_text(json.dumps(configuration))
@@ -121,7 +121,7 @@ with zipfile.ZipFile(ipa) as archive:
         alternate_icons = info.get("CFBundleIcons", {}).get("CFBundleAlternateIcons", {})
         expected_icons = {path.stem for path in (source / "Telegram/Telegram-iOS").glob("Ayu*.icon")}
         if not expected_icons.issubset(alternate_icons):
-            raise SystemExit("Built IPA is missing the declared VoidGram alternate icons")
+            raise SystemExit("Built IPA is missing the declared Nowzen alternate icons")
     binary = archive.read("Payload/Telegram.app/" + info["CFBundleExecutable"])
     if binary[:4] != b"\xcf\xfa\xed\xfe":
         raise SystemExit("Expected a 64-bit Mach-O executable")
@@ -143,7 +143,7 @@ with zipfile.ZipFile(ipa) as archive:
         raise SystemExit(f"Wrong Mach-O platform: expected {expected_platform}, found {platform_id}")
     if any(name.endswith("embedded.mobileprovision") for name in archive.namelist()):
         raise SystemExit("Unsigned compilation artifact unexpectedly contains provisioning material")
-ipa = ipa.rename(artifacts / "VoidGram.ipa")
+ipa = ipa.rename(artifacts / "Nowzen.ipa")
 manifest = dict(phase=args.phase, configuration=args.configuration, xcode=actual_xcode, macos=macos,
                 ipa_bytes=ipa.stat().st_size, bundle_bytes=bundle_bytes, asset_catalog_bytes=asset_catalog_bytes,
                 native_arm64=True, macho_platform=platform_id,

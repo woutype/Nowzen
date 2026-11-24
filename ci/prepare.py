@@ -100,8 +100,8 @@ for name in ("GlassBlue", "GlassGraphite"):
 # the picker shows a 300 px preview. Chibi2 is gone.
 classic_fills = {
     "Default": "#2B2242", "Alt": "#9C7CFF", "Discord": "#5865F2", "Spotify": "#121212",
-    "Extera": "#E53935", "Nothing": "#F4F4F4", "Bard": "#FFFFFF", "Yaplus": "#FBF4F8",
-    "Win95": "#008080", "Chibi": "#2A282A", "Extera2": "#E53935",
+    "Extera": "#E53935", "Nothing": "#F4F4F4", "Bard": "#FFFFFF", "Yaplus": "#26152B",
+    "Win95": "#008080", "Chibi": "#141416", "Extera2": "#0B2A36",
 }
 classic_art = {"Chibi": "MeiMei"}
 shutil.rmtree(icons / "AyuOriginalChibi2.icon")
@@ -111,31 +111,26 @@ for name, fill in classic_fills.items():
     bundle = icons / f"AyuOriginal{name}.icon"
     for old in (bundle / "Assets").iterdir():
         old.unlink()
-    shutil.copy2(voidgram / "classic" / f"{art}.png", bundle / "Assets" / "VoidGram.png")
+    shutil.copy2(voidgram / "classic" / f"{art}.png", bundle / "Assets" / "Nowzen.png")
     icon = json.loads((bundle / "icon.json").read_text())
     red, green, blue = (int(fill[i:i + 2], 16) / 255 for i in (1, 3, 5))
     icon["fill"] = {"solid": f"extended-srgb:{red:.5f},{green:.5f},{blue:.5f},1.00000"}
     for group in icon["groups"]:
         for layer in group["layers"]:
-            layer["image-name"] = "VoidGram.png"
-            layer["name"] = f"VoidGram {art}"
+            layer["image-name"] = "Nowzen.png"
+            layer["name"] = f"Nowzen {art}"
             layer.pop("position", None)
     (bundle / "icon.json").write_text(json.dumps(icon, indent=2) + "\n")
 
     image_set = source / "submodules/TelegramUI/Images.xcassets/AyuGram" / f"Original{name}.imageset"
     for old in image_set.iterdir():
         old.unlink()
-    shutil.copy2(voidgram / "classic" / f"{art}-Preview.png", image_set / "VoidGram.png")
-    contents = {"images": [{"idiom": "universal", "filename": "VoidGram.png", "scale": "3x"}], "info": {"author": "xcode", "version": 1}}
+    shutil.copy2(voidgram / "classic" / f"{art}-Preview.png", image_set / "Nowzen.png")
+    contents = {"images": [{"idiom": "universal", "filename": "Nowzen.png", "scale": "3x"}], "info": {"author": "xcode", "version": 1}}
     (image_set / "Contents.json").write_text(json.dumps(contents, indent=2) + "\n")
 
-# iOS caches each alternate icon's flat rendering by its name, so MeiMei under the old
-# AyuOriginalChibi name kept showing the chibi outside the clear appearance. A new name
-# makes SpringBoard render it afresh.
+# iOS caches each alternate icon's flat rendering by its name.
 (icons / "AyuOriginalChibi.icon").rename(icons / "AyuMeiMei.icon")
-
-# Easter egg (Settings → VoidGram → More → Other): @natsuk1n_dev's music, played from the bundle.
-shutil.copy2(root / "assets/easter/NatsukinMusic.mp3", source / "submodules/TelegramUI/Resources/NatsukinMusic.mp3")
 
 for badge_name in ("ExteraBadge", "ExteraDeveloperBadge"):
     badge_src = root / "assets" / "branding" / f"{badge_name}.imageset"
@@ -156,21 +151,147 @@ font_dst = source / "submodules" / "TelegramUI" / "Resources" / font_src.name
 font_dst.parent.mkdir(parents=True, exist_ok=True)
 shutil.copy2(font_src, font_dst)
 
-# VoidGram settings pull-down easter egg image, bundled the same way.
-eblan_src = root / "assets" / "easter" / "AyuEblan.png"
-if eblan_src.is_file():
-    shutil.copy2(eblan_src, source / "submodules" / "TelegramUI" / "Resources" / eblan_src.name)
-
 # Bubble skins (AyuBubbleSkin.swift): the gold frame's 9-slice and ornaments and the grey
-# skin's pattern tile, loaded from the bundle by name. Rebuilt by assets/bubbles/*.py.
+# skin's pattern tile, loaded from the bundle by name.
 for bubble_asset in sorted((root / "assets" / "bubbles").glob("VoidGramBubble*@3x.png")):
     shutil.copy2(bubble_asset, source / "submodules" / "TelegramUI" / "Resources" / bubble_asset.name)
-# The first screen's logo and the wallpapers offered in Themes, colours & badges, by name too.
-shutil.copy2(root / "assets" / "welcome" / "VoidGramWelcomeLogo@3x.png", source / "submodules" / "TelegramUI" / "Resources" / "VoidGramWelcomeLogo@3x.png")
-for wallpaper in sorted((root / "assets" / "wallpapers").glob("VoidGramWallpaper*.jpg")):
+# The first screen's logo and the wallpapers offered in Themes, colours & badges.
+shutil.copy2(root / "assets" / "welcome" / "NowzenWelcomeLogo@3x.png", source / "submodules" / "TelegramUI" / "Resources" / "NowzenWelcomeLogo@3x.png")
+for wallpaper in sorted((root / "assets" / "wallpapers").glob("NowzenWallpaper*.jpg")):
     shutil.copy2(wallpaper, source / "submodules" / "TelegramUI" / "Resources" / wallpaper.name)
+
+
+def apply_nowzen_branding(src: Path):
+    """Remove author credits/ads/easter-eggs and rebrand VoidGram -> Nowzen."""
+    import re
+
+    # 1. Remove easter-egg Swift files
+    for rel in (
+        "submodules/SettingsUI/Sources/AyuEblanButton.swift",
+        "submodules/SettingsUI/Sources/AyuNatsukinMusic.swift",
+    ):
+        (src / rel).unlink(missing_ok=True)
+
+    # 2. Clean AyuSettingsController.swift (remove AyuNatsukinMusicButton block)
+    settings_ctrl = src / "submodules/SettingsUI/Sources/AyuSettingsController.swift"
+    if settings_ctrl.is_file():
+        text = settings_ctrl.read_text(encoding="utf-8")
+        text = re.sub(
+            r"\n\s*// Easter egg:.*?controller\.didDisappear = \{ _ in\n\s*music\.stop\(\)\n\s*\}",
+            "",
+            text,
+            flags=re.S,
+        )
+        settings_ctrl.write_text(text, encoding="utf-8")
+
+    # 3. Clean AyuGramSettingsController.swift (remove CREDITS, author/channel links, and AyuEblan pull easter egg)
+    main_ctrl = src / "submodules/SettingsUI/Sources/AyuGramSettingsController.swift"
+    if main_ctrl.is_file():
+        text = main_ctrl.read_text(encoding="utf-8")
+        # Remove LINKS section entries (channel/group) and CREDITS section entries
+        text = re.sub(
+            r'\n\s*\.header\(6, 70, AyuStrings\.links\.text\(ru\)\),\n\s*link\(6, \.channel[^\n]*\n\s*link\(6, \.sourceCode[^\n]*\n\s*link\(6, \.officialGroup[^\n]*',
+            '\n            .header(6, 70, AyuStrings.links.text(ru)),\n            link(6, .sourceCode, AyuStrings.sourceCode.text(ru), "GitHub")',
+            text,
+        )
+        text = re.sub(
+            r'\n\s*entries\.append\(contentsOf:\s*\[\s*\n\s*\.header\(8, 90, ru \? "КТО ДЕЛАЛ" : "CREDITS"\),.*?\]\)',
+            "",
+            text,
+            flags=re.S,
+        )
+        # Update sourceCode URL to woutype/Nowzen
+        text = text.replace("https://github.com/neosay-dev/VoidGram", "https://github.com/woutype/Nowzen")
+        # Remove AyuEblanPullButton block
+        text = re.sub(
+            r"\n\s*// The first pull brings out the search field;.*?(?=\n\s*controller\.contentOffsetChanged)",
+            "",
+            text,
+            flags=re.S,
+        )
+        text = re.sub(
+            r"\n\s*var eblanArmed = false\n\s*controller\.beganInteractiveDragging = \{[^}]*\}",
+            "",
+            text,
+            flags=re.S,
+        )
+        text = re.sub(
+            r"\n\s*guard let controller, case let \.known\(value\) = offset else \{ return \}.*?eblan\.update\(pull: eblanArmed \? -value : 0\.0\)",
+            "",
+            text,
+            flags=re.S,
+        )
+        main_ctrl.write_text(text, encoding="utf-8")
+
+    # 4. Update AyuAppIconCatalog.swift with all 16 Nowzen colorways
+    catalog = src / "submodules/TelegramPresentationData/Sources/AyuAppIconCatalog.swift"
+    if catalog.is_file():
+        catalog.write_text(
+            '''import Foundation
+
+public struct AyuAppIconPreset {
+    public let name: String?
+    public let assetName: String
+    public let title: String
+    public let russianTitle: String
+}
+
+public enum AyuAppIconCatalog {
+    public static let presets: [AyuAppIconPreset] = [
+        AyuAppIconPreset(name: nil, assetName: "AyuGram/Brand", title: "Nowzen", russianTitle: "Nowzen"),
+        AyuAppIconPreset(name: "AyuBlue", assetName: "AyuGram/Blue", title: "Nowzen Blue", russianTitle: "Nowzen · синий"),
+        AyuAppIconPreset(name: "AyuGraphite", assetName: "AyuGram/Graphite", title: "Nowzen Light", russianTitle: "Nowzen · светлый"),
+        AyuAppIconPreset(name: "AyuGlassBlue", assetName: "AyuGram/GlassBlue", title: "Glass Blue", russianTitle: "Стекло · синий"),
+        AyuAppIconPreset(name: "AyuGlassGraphite", assetName: "AyuGram/GlassGraphite", title: "Glass Graphite", russianTitle: "Стекло · графит"),
+        AyuAppIconPreset(name: "AyuOriginalDefault", assetName: "AyuGram/OriginalDefault", title: "Nowzen Violet", russianTitle: "Nowzen · фиолетовый"),
+        AyuAppIconPreset(name: "AyuOriginalAlt", assetName: "AyuGram/OriginalAlt", title: "Nowzen Lavender", russianTitle: "Nowzen · лаванда"),
+        AyuAppIconPreset(name: "AyuOriginalDiscord", assetName: "AyuGram/OriginalDiscord", title: "Nowzen Indigo", russianTitle: "Nowzen · индиго"),
+        AyuAppIconPreset(name: "AyuOriginalSpotify", assetName: "AyuGram/OriginalSpotify", title: "Nowzen Emerald", russianTitle: "Nowzen · изумруд"),
+        AyuAppIconPreset(name: "AyuOriginalExtera", assetName: "AyuGram/OriginalExtera", title: "Nowzen Crimson", russianTitle: "Nowzen · алый"),
+        AyuAppIconPreset(name: "AyuOriginalNothing", assetName: "AyuGram/OriginalNothing", title: "Nowzen Mono", russianTitle: "Nowzen · моно"),
+        AyuAppIconPreset(name: "AyuOriginalBard", assetName: "AyuGram/OriginalBard", title: "Nowzen Aurora", russianTitle: "Nowzen · аврора"),
+        AyuAppIconPreset(name: "AyuOriginalYaplus", assetName: "AyuGram/OriginalYaplus", title: "Nowzen Sunset", russianTitle: "Nowzen · закат"),
+        AyuAppIconPreset(name: "AyuOriginalWin95", assetName: "AyuGram/OriginalWin95", title: "Nowzen Retro", russianTitle: "Nowzen · ретро"),
+        AyuAppIconPreset(name: "AyuMeiMei", assetName: "AyuGram/OriginalChibi", title: "Nowzen Gold", russianTitle: "Nowzen · золото"),
+        AyuAppIconPreset(name: "AyuOriginalExtera2", assetName: "AyuGram/OriginalExtera2", title: "Nowzen Cyan", russianTitle: "Nowzen · циан"),
+    ]
+}
+''',
+            encoding="utf-8",
+        )
+
+    # 5. Rebrand Telegram/BUILD and all modified Swift sources: VoidGram -> Nowzen
+    build_file = src / "Telegram/BUILD"
+    if build_file.is_file():
+        btext = build_file.read_text(encoding="utf-8")
+        btext = btext.replace("VoidGram", "Nowzen")
+        build_file.write_text(btext, encoding="utf-8")
+
+    changed = set()
+    for args in (["diff", "--name-only", "-z", "HEAD"], ["ls-files", "--others", "--exclude-standard", "-z"]):
+        out = subprocess.check_output(["git", *args], cwd=src)
+        changed.update(p.decode("utf-8") for p in out.split(b"\0") if p.endswith(b".swift"))
+
+    for rel in sorted(changed):
+        fpath = src / rel
+        if not fpath.is_file():
+            continue
+        t = fpath.read_text(encoding="utf-8")
+        updated = (
+            t.replace("https://github.com/neosay-dev/VoidGram", "https://github.com/woutype/Nowzen")
+            .replace("VoidGramWelcomeLogo", "NowzenWelcomeLogo")
+            .replace("VoidGramWallpaper", "NowzenWallpaper")
+            .replace("VoidGram", "Nowzen")
+            .replace("VOIDGRAM", "NOWZEN")
+        )
+        if updated != t:
+            fpath.write_text(updated, encoding="utf-8")
+
+
+apply_nowzen_branding(source)
 
 missing = missing_port_sources(source)
 if missing:
     raise SystemExit("Port patch is missing required native source files:\n" + "\n".join(missing))
-print("Applied native VoidGram changes to " + actual)
+print("Applied native Nowzen changes to " + actual)
+

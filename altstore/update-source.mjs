@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Adds a release to the AltStore / SideStore source (newest first).
 // Usage: node altstore/update-source.mjs <version> <build> <release tag> <ipa path> "<what's new>"
-// Add the source in AltStore: https://raw.githubusercontent.com/neosay-dev/VoidGram/main/altstore/source.json
+// Add the source in AltStore: https://raw.githubusercontent.com/woutype/Nowzen/main/altstore/source.json
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,8 +18,8 @@ const entry = {
   version,
   buildVersion: String(build),
   date: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-  localizedDescription: notes || `VoidGram ${version}`,
-  downloadURL: `https://github.com/neosay-dev/VoidGram/releases/download/${tag}/${path.basename(ipaPath)}`,
+  localizedDescription: notes || `Nowzen ${version}`,
+  downloadURL: `https://github.com/woutype/Nowzen/releases/download/${tag}/${path.basename(ipaPath)}`,
   size: fs.statSync(ipaPath).size,
   minOSVersion: "15.0",
 };

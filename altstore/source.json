@@ -1,31 +1,21 @@
 {
-  "name": "VoidGram",
-  "identifier": "one.ayugram.unofficial.ios.source",
-  "subtitle": "VoidGram — Telegram client with ghost mode, message history and plugins.",
-  "website": "https://github.com/neosay-dev/VoidGram",
+  "name": "Nowzen",
+  "identifier": "com.woutype.nowzen.ios.source",
+  "subtitle": "Nowzen — Telegram client with ghost mode, message history and plugins.",
+  "website": "https://github.com/woutype/Nowzen",
   "tintColor": "8E5CF7",
   "apps": [
     {
-      "name": "VoidGram",
-      "bundleIdentifier": "one.ayugram.unofficial.ios",
-      "developerName": "murk-sus & neosay-dev",
+      "name": "Nowzen",
+      "bundleIdentifier": "com.woutype.nowzen.ios",
+      "developerName": "woutype",
       "subtitle": "Telegram with ghost mode, history and plugins.",
-      "localizedDescription": "VoidGram: ghost mode, saved deleted and edited messages, JavaScript, Python and Rust plugins, glass and themes, decoy mode and more. Unofficial client; sideload with AltStore or SideStore.",
-      "iconURL": "https://raw.githubusercontent.com/neosay-dev/VoidGram/main/altstore/icon.png",
+      "localizedDescription": "Nowzen: ghost mode, saved deleted and edited messages, JavaScript, Python and Rust plugins, glass and themes, decoy mode and more. Unofficial client; sideload with AltStore or SideStore.",
+      "iconURL": "https://raw.githubusercontent.com/woutype/Nowzen/main/altstore/icon.png",
       "tintColor": "8E5CF7",
       "category": "social",
       "screenshots": [],
-      "versions": [
-        {
-          "version": "27.0.2",
-          "buildVersion": "88",
-          "date": "2026-10-31T21:51:39Z",
-          "localizedDescription": "Glass and bubbles, messages section, tools (VirusTotal, AI, voice changer, icon packs), gifts catalog and accountChange for plugins.",
-          "downloadURL": "https://github.com/neosay-dev/VoidGram/releases/download/build-88-branch/AyuGramm-IOS-27.0.2.ipa",
-          "size": 156144315,
-          "minOSVersion": "15.0"
-        }
-      ],
+      "versions": [],
       "appPermissions": {
         "entitlements": [],
         "privacy": {

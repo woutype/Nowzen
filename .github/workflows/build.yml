@@ -1,19 +1,8 @@
-name: Native iOS port
+name: Nowzen iOS Build & Release
 
-# Mirrors codemagic.yaml: cheap source checks run before the large native dependency
-# download, so most source errors fail within a few minutes. Pushes to main that touch
-# the port start an optimized release_arm64 build; documentation-only pushes do not.
 on:
   push:
     branches: [main]
-    paths:
-      - patches/**
-      - assets/**
-      - ci/**
-      - plugins/**
-      - tools/**
-      - upstream.json
-      - .github/workflows/build.yml
   workflow_dispatch:
     inputs:
       configuration:
@@ -27,12 +16,12 @@ on:
         default: true
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   attestations: write
 
 concurrency:
-  group: ayu-ios-${{ github.ref }}
+  group: nowzen-ios-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -49,24 +38,31 @@ jobs:
       TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
       - name: Select pinned Xcode and report resources
         run: |
           sudo xcode-select --switch /Applications/Xcode_27.1.app/Contents/Developer
           xcodebuild -version
           sw_vers
           df -h
+
       - name: Verify macOS build dependencies
         run: bash ci/prepare_macos.sh
-      - name: Validate Telegram login credentials
+
+      - name: Check Telegram API credentials
         run: |
           python3 - <<'PY'
           import os, re
           api_id = os.environ.get('TELEGRAM_API_ID', '').strip()
           api_hash = os.environ.get('TELEGRAM_API_HASH', '').strip()
-          if not api_id.isdigit() or int(api_id) <= 0 or not re.fullmatch(r'[0-9a-fA-F]{32}', api_hash):
-              raise SystemExit('Set TELEGRAM_API_ID and TELEGRAM_API_HASH in the repository Actions secrets before building.')
-          print('Telegram API credentials are configured; values are hidden.')
+          if not api_id or not api_hash:
+              print('::warning::TELEGRAM_API_ID / TELEGRAM_API_HASH secrets are not set; building compilation-only IPA.')
+          elif not api_id.isdigit() or int(api_id) <= 0 or not re.fullmatch(r'[0-9a-fA-F]{32}', api_hash):
+              raise SystemExit('TELEGRAM_API_ID / TELEGRAM_API_HASH have an invalid format.')
+          else:
+              print('Telegram API credentials are configured.')
           PY
+
       - name: Fetch pinned Telegram source
         run: |
           set -euo pipefail
@@ -78,6 +74,7 @@ jobs:
           subprocess.run(['git', '-C', 'telegram', 'fetch', '--depth=1', 'origin', pin['commit']], check=True)
           subprocess.run(['git', '-C', 'telegram', 'checkout', '--detach', 'FETCH_HEAD'], check=True)
           PY
+
       - name: Apply port and run source checks
         run: |
           set -euo pipefail
@@ -88,24 +85,36 @@ jobs:
             python3 ci/preflight.py telegram
             python3 ci/test_models.py telegram | tee "$RUNNER_TEMP/ayu-tests.log"
           } 2>&1 | tee "$RUNNER_TEMP/ayu-checks.log"
+
       - name: Fetch pinned native dependencies
         if: github.event_name == 'push' || inputs.native_build
         run: |
           set -euo pipefail
-          # Shallow first (much less to download); fall back to full history if a host refuses SHA fetches.
           git -C telegram submodule update --init --recursive --jobs=8 --depth=1 \
             || git -C telegram submodule update --init --recursive --jobs=8
+
       - name: Restore Bazel disk cache
+        id: bazel-cache
         if: github.event_name == 'push' || inputs.native_build
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/ayu-bazel-cache
-          key: ayu-bazel-${{ env.CONFIGURATION }}-${{ hashFiles('upstream.json') }}-${{ github.sha }}
+          key: nowzen-bazel-${{ env.CONFIGURATION }}-${{ hashFiles('upstream.json') }}-${{ github.sha }}
           restore-keys: |
-            ayu-bazel-${{ env.CONFIGURATION }}-${{ hashFiles('upstream.json') }}-
-      - name: Build native VoidGram port
+            nowzen-bazel-${{ env.CONFIGURATION }}-${{ hashFiles('upstream.json') }}-
+
+      - name: Build native Nowzen iOS port
         if: github.event_name == 'push' || inputs.native_build
         run: python3 -u ci/build.py telegram --phase port --configuration "$CONFIGURATION"
+
+      - name: Save Bazel disk cache
+        if: always() && (github.event_name == 'push' || inputs.native_build) && steps.bazel-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/ayu-bazel-cache
+          key: nowzen-bazel-${{ env.CONFIGURATION }}-${{ hashFiles('upstream.json') }}-${{ github.sha }}
+
       - name: TrollStore package
         if: success() && hashFiles('telegram/artifacts/port/*.ipa') != ''
         continue-on-error: true
@@ -113,14 +122,16 @@ jobs:
           set -euo pipefail
           brew install ldid
           ipa=$(ls telegram/artifacts/port/*.ipa | head -n 1)
-          python3 ci/trollstore.py "$ipa" "${ipa%.ipa}-TrollStore.tipa" one.ayugram.unofficial.ios AYUCOMPILE
+          python3 ci/trollstore.py "$ipa" "${ipa%.ipa}-TrollStore.tipa" com.woutype.nowzen.ios NOWZENCI
+
       - name: Show errors on the run page
         if: failure()
-        run: python3 ci/annotate_failure.py "VoidGram build failed" "$RUNNER_TEMP/ayu-checks.log" telegram/artifacts/port/build.log
+        run: python3 ci/annotate_failure.py "Nowzen build failed" "$RUNNER_TEMP/ayu-checks.log" telegram/artifacts/port/build.log
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: VoidGram-ios-${{ env.CONFIGURATION }}-unsigned-${{ github.run_number }}
+          name: Nowzen-ios-${{ env.CONFIGURATION }}-unsigned-${{ github.run_number }}
           path: |
             telegram/artifacts/port/*.ipa
             telegram/artifacts/port/*.tipa
@@ -129,13 +140,46 @@ jobs:
             ${{ runner.temp }}/ayu-tests.log
           if-no-files-found: ignore
           retention-days: 7
-      - name: Attest the IPA (proves which commit it was built from)
+
+      - name: Publish GitHub Release
+        if: success() && hashFiles('telegram/artifacts/port/*.ipa') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: 1.0.${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-files
+          ipa=$(ls telegram/artifacts/port/*.ipa | head -n 1)
+          cp "$ipa" "release-files/Nowzen-v${VERSION}.ipa"
+          tipa=$(ls telegram/artifacts/port/*.tipa | head -n 1 || true)
+          if [ -n "$tipa" ]; then
+            cp "$tipa" "release-files/Nowzen-v${VERSION}-TrollStore.tipa"
+          fi
+          {
+            echo "## Nowzen v${VERSION}"
+            echo ""
+            echo "iOS build #${{ github.run_number }} from commit \`${GITHUB_SHA}\` (\`${CONFIGURATION}\`)."
+            echo ""
+            echo "| File | Size | SHA-256 |"
+            echo "|---|---|---|"
+            for f in release-files/*; do
+              echo "| $(basename "$f") | $(stat -f%z "$f" | awk '{printf "%.2f MiB", $1/1048576}') | \`$(shasum -a 256 "$f" | cut -d' ' -f1)\` |"
+            done
+          } > release-notes.md
+          gh release create "v${VERSION}" release-files/* \
+            --target "$GITHUB_SHA" \
+            --title "Nowzen v${VERSION}" \
+            --notes-file release-notes.md \
+            --latest
+
+      - name: Attest the IPA
         if: success() && hashFiles('telegram/artifacts/port/*.ipa') != ''
         continue-on-error: true
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: telegram/artifacts/port/*.ipa
-      - name: Free disk space before the cache is saved
+
+      - name: Free disk space
         if: always()
         continue-on-error: true
         run: |

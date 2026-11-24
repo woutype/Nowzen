@@ -1,134 +1,28 @@
-# VoidGram
+# Nowzen
 
-VoidGram (formerly AyuGramm-IOS) is an unofficial Telegram client for iOS.
+Nowzen is an unofficial Telegram client for iOS.
 
-<img src="assets/branding/voidgram/VoidGram-icon.svg" width="128" alt="VoidGram logo">
+<img src="assets/branding/voidgram/VoidGram-icon.svg" width="128" alt="Nowzen logo">
 
-The maintainer reports testing the app on an iPhone.
+## Features
 
-An unofficial native Telegram-iOS adaptation with AyuGram-inspired features. [Release 3](https://github.com/neosay-dev/VoidGram/releases/tag/v0.3.0-preview) is available as **AyuGramm-IOS.ipa**. See the [complete Release 3 changelog](docs/releases/v0.3.0.md) for additions, fixes, installation and verification status. [Previous releases](https://github.com/neosay-dev/VoidGram/releases) remain available.
+- **Custom App Icon & Colorways**: Built-in in-app icon switcher (`Settings → Nowzen → Appearance / App Icon`) with 16 color variants including dark, blue, light, liquid glass, emerald, crimson, mono, aurora, sunset, retro, gold, and cyan.
+- **Ghost Mode**: Per-account controls for read receipts, online status, typing/recording indicators, and upload progress (`Settings → Privacy and Security → Nowzen · Ghost Mode`).
+- **Message History**: Local edit/deletion ledger, formatting and reaction snapshots, and reversible local message hiding.
+- **Plugins**: JavaScript, Python, and native plugin support.
+- **Music Player & Lyrics**: Synchronized lyrics, track recognition, and 120 Hz animations.
+- **Appearance & Interface**: Custom bubble skins, chat colors, MessageShot, and tab bar customization.
 
-Release 3 source changes add message-menu controls, author search, filter management, MessageShot appearance, text-to-draft/search/ID tools, reversible local message hiding, reaction-display settings and updated app artwork. Reliability changes cover filter scope, image bounds, missing App Group access, startup diagnostics and database-key persistence. See the detailed changelog for source changes.
+## Cloud Builds (GitHub Actions)
 
-## Current implementation
+Every push to `main` automatically runs **Nowzen iOS Build & Release** (`.github/workflows/build.yml`):
+- Applies the native port patches onto the pinned `Telegram-iOS` commit (`upstream.json`).
+- Uses `actions/cache` for the Bazel disk cache (`nowzen-bazel-*`) so subsequent builds reuse compiled artifacts and run significantly faster.
+- Builds `release_arm64` `.ipa` and TrollStore `.tipa` packages and publishes a new versioned GitHub Release (`v1.0.<run_number>`).
 
-Development source adds Telegram-style pull-down settings search, chat-local Ghost Mode,
-searchable message history with before/after comparisons, parallel lyrics lookup
-and five player lyrics styles. See [feature access and validation status (RU)](docs/DAILY_UX_RU.md).
+Configure `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` in **Repository Settings → Secrets and variables → Actions** for Telegram login support.
 
-Development source adds **tap .plugin -> review -> Import and enable**, automatic local conversion of complete literal outgoing-text hook templates, atomic activation and restored hook behavior after restart. Direct Java/Xposed/UI hooks still need dedicated mappings. See [conversion patterns and exact scope](docs/PLUGIN_CONVERSION.md).
-
-The next development block reorganizes **VoidGram Preferences** into categories without a large header, adds the **@neosay1337** channel link, full plugin-details pages and a native app-icon picker with the owner's three variants plus all twelve original AyuGram Desktop presets. See [preferences and icon changes](docs/PREFERENCES_AND_ICONS.md) for scope and regression coverage. Release 3's existing IPA is unchanged.
-
-Development source after Release 3 adds **Settings → VoidGram → Plugins**, native `.plugin` import/export and actions, a reviewed partial Search+ 2.6.1 adapter, and puzzle-piece icons. See [supported operations, conversion limits and verification](docs/PLUGINS.md). The already published Release 3 IPA does not contain this block.
-
-This repository contains a reproducible native source patch against Telegram-iOS commit `fb0e62ba8a147f0821da6aa63c09da7d79a10111`. `ci/prepare.py` checks the exact commit before applying it. The complete upstream client supplies authentication, chats, media and calls; these still require regression testing for this port.
-
-If you would like to support the repository authors, you can send a contribution to our TRC20 wallets or mono
-
-murk-sus: only TRC20: TCPD7jzSMtQ4zkoSxSbUZi6RFoVdKqv78w
-
-neosay-dev (only mono): mono: 4874070019870151
-
-Experimental Ghost Mode adds per-account persistent controls for cloud chat/discussion read receipts, explicit online status, typing/recording and upload progress. Open **Settings → Privacy and Security → VoidGram · Ghost Mode**. All options default off. Secret-chat read handling, media consumption/expiration and story-view receipts retain upstream behavior. This is not an absolute-invisibility guarantee. New reads after disabling the mode can acknowledge earlier messages. Already transmitted requests cannot be retracted.
-
-Ghost Mode conflicts with [Telegram API Terms section 1.4](https://core.telegram.org/api/terms). Server Premium features are not unlocked. The complete AyuGram feature set is still being ported.
-
-The development sources add a local edit/deletion ledger, formatting and reaction snapshots, a bot-capture preference, message metadata, silent-send modes, local regex filtering and opt-in local media archiving. The build 8 preview is now published. See [history verification](docs/LOCAL_HISTORY.md) and the [complete parity checklist](docs/PARITY_CHECKLIST.md).
-
-## Badges on the server (development source)
-
-Badges, labels and NFTs now live only on the VoidGram badge server (`badge.vinx.best`, bot
-@AyuZayavka_bot); nothing is committed to this repository any more. The app accepts a badge list
-only when the server's Ed25519 signature matches the key built into the app and the copy is not
-older than the one it already has. Changes need Telegram's own signature of the Mini App data, so
-a leaked bot token is not enough; each change is logged and can be undone. The owner manages
-badges from any profile (**VoidGram badge…**) or with `/help` in the bot.
-`assets/ayugram_ios_badges.json` is the snapshot imported on 2026-11-04 and is no longer read.
-
-An NFT granted in VoidGram and worn shows only to VoidGram users; everyone else keeps seeing the
-Telegram status. Picking a Telegram status (an emoji from a pack, a real collectible or none)
-changes it for everyone and takes the VoidGram NFT off.
-
-## Big update (development source)
-
-- **Music player**: fast track skipping no longer closes the player (a transient empty state
-  is waited out); artwork, backdrop and titles cross-fade; 120 Hz; interruptible springs.
-- **Track recognition**: cleaner filename parsing, embedded ID3/iTunes tags, optional Shazam
-  (hold the lyrics button); lyrics candidates must match title/artist (Cyrillic-aware) and
-  duration; NetEase added for synced lyrics.
-- **Code plugins**: JavaScript in its own VM per plugin that can wrap or replace app handlers
-  and switch features off; JSON plugins unchanged. See [code plugins](docs/CODE_PLUGINS.md).
-- **Find channels and people**: live search, filters, t.me/@username/ID, and a local archive
-  that keeps names of deleted accounts and removed channels by their saved ID.
-- **Ghost Mode exceptions**: the chat header ghost button now toggles only that chat.
-- **Appearance+**: hide Contacts/Calls tabs and tab titles, Telegram vs system Liquid Glass,
-  classic full-width tab bar.
-- **Developer settings** (all off by default): player debug overlay, FPS counter, slow
-  animations, stock player, lyrics diagnostics, plugin console, verbose log.
-
-## Chat appearance (development source)
-
-Open **Settings → VoidGram → Chat Appearance**. Per-account controls show/hide the header ghost button, display timestamp seconds, and customize deleted/edited labels. Empty labels use the current app language. Save labels applies text; switches apply immediately. Reset affects appearance only. Deleted-text capture remains a separate opt-in under Message History. These changes are part of the build 8 preview;
-
-## Media sending (development source)
-
-Open **Settings → VoidGram → Sending Options**. Independent per-account switches confirm sticker/GIF sends and require native preview for ordinary voice/video-note recordings. All four default off. View-once recordings retain their native flow. See [scope and device checks](docs/MEDIA_SENDING.md).
-
-## Interface and MessageShot (development source)
-
-**Settings → VoidGram → Interface** controls copyable IDs in profiles, ordinary bubble quick-share buttons, the Chats tab unread badge and MessageShot visibility. MessageShot appears in a message context menu or the Share choices after selecting messages. It creates a bounded card image with authors, formatted text, dates and cached image previews; other media has a label. Preview/zoom and the native share/save sheet are available before export. Protected/expiring content is excluded and spoilers remain masked. See [scope and verification](docs/MESSAGE_SHOT_AND_INTERFACE.md).
-
-## Message menu (development source after build 8)
-
-The next source revision adds **Settings → VoidGram → Message Menu**: reaction-picker, read/reaction-summary, edit-information and Message Details visibility, plus **Messages from Author** using native group search. These per-account controls apply on the next menu opening and are not included in published build 8. See [scope and regression checks](docs/MESSAGE_MENU.md).
-
-## Filter management (development source after build 8)
-
-The latest development sources also add **VoidGram · Add Filter** to eligible message menus, literal-text rule drafts, saved/editor rule counts and confirmed **Clear all rules**. The default channels-only scope now distinguishes broadcast channels from supergroups. See [filter management and verification](docs/FILTER_MANAGEMENT.md). These changes are not in build 8.
-
-## MessageShot appearance (development source after build 8)
-
-The new **Settings → VoidGram → MessageShot Appearance** page controls theme (app/light/dark), outer-background transparency, author/date/header visibility and cached-media previews, with a reset limited to this feature. Changes affect newly generated images. See [appearance scope and verification](docs/MESSAGE_SHOT_AND_INTERFACE.md). This block is not in build 8.
-
-## Message text tools (development source after build 8)
-
-Message menus now offer **Repeat Text** (confirmed append to a draft, no automatic send), **Find Phrase** (native in-chat search) and **Copy Message IDs**. Each has an account-specific visibility switch under Message Menu. See [scope, prior-block review and device checks](docs/TEXT_TOOLS.md). These changes are not in build 8.
-
-## Hidden messages (development source after build 8)
-
-**VoidGram · Hide Locally** hides an ordinary cloud message/album from the account's main chat history without deleting it. **Settings → VoidGram → Hidden Messages** offers a temporary bypass, individual restoration and confirmed restore-all, with a 200-item limit. The list stores references only. Search, selection and tagged/media views bypass both manual hiding and regex filtering. See [scope and regression checks](docs/HIDDEN_MESSAGES.md). This block is not in build 8.
-
-## Reaction display (development source after build 8)
-
-**Settings → VoidGram → Chat Reactions** independently shows/hides reaction rendering in private chats, groups and channels. Saved Messages tags and unknown peer types retain native behavior. This does not remove server reactions or disable the menu picker. See [rendering scope and pending native checks](docs/REACTION_DISPLAY.md). The block is not included in build 8.
-
-## Ghost Mode+, translation, export and archive (development source after Chat Colors)
-
-Opt-in scheduled sending and read-after-send, Telegram/LibreTranslate/DeepL translation, HTML+JSON chat export or forwarding to Saved Messages, a media archive manager, a local-only emoji status and **VoidGram · Repeat** with a sender-hidden copy for attachments. See [scope and limits](docs/ADVANCED_FEATURES.md). These blocks are included in Release 4.
-
-## Cloud builds from Windows
-
-Builds are run manually by the owner in **Codemagic** with the pinned Xcode 27.1. `ayugram-ios-unsigned` builds `release_arm64` (optimized, published IPAs); `ayugram-ios-fast` builds `debug_arm64` for quick compile checks and test installs (unoptimized, no dSYM, larger and slower at runtime). Both run the cheap source checks before downloading the large native dependencies, so most source errors fail within minutes. GitHub Actions runs the same steps: pushes to `main` that change the port (`patches/`, `ci/`, `upstream.json`, the workflow) build the optimized `release_arm64` IPA, and **Run workflow** can choose `debug_arm64` for a faster compile check (about 500 MB IPA). Actions uses the repository secrets `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`.
-
-Codemagic uses the same release configuration on the free Mac M2 tier. Import the `telegram_credentials` variable group with Secure `TELEGRAM_API_ID` and `TELEGRAM_API_HASH`. Its reusable Bazel disk cache is capped at 2.5 GB to fit the personal-plan quota; the first successful release build populates it. Cache reuse and speed gains still require measurement.
-
-### Branding and Ghost Mode controls (build 8 preview)
-
-- VoidGram branding: a two-blade mark with a grey core on a dark gradient, drawn as vector (`assets/branding/voidgram`). Blue, light and glass variants come from the same mark.
-- A direct **VoidGram · Ghost Mode** entry near the top of Settings, retaining the existing Privacy and Security entry.
-- A ghost button next to the chat header controls: solid ghost when any Ghost Mode option is active, crossed outline when all are off. Tapping toggles Ghost Mode; detailed switches remain in VoidGram settings. The indicator reflects local policy, not server-confirmed invisibility.
-- After a successful cloud-message send, reassert offline status when Hide Online is enabled. A brief server-visible activity window remains possible; failures do not alter send results.
-
-The current source also fixes a Postbox raw-enum serialization trap and retains eligible deleted text inline with a Deleted label beside the message time. Clear Archive, expiry and eviction remove these local text tombstones. The app icon uses an edge-to-edge native background with a separate airplane foreground.
-
-Build 8 is published as a preview. These changes are absent from the original v0.1.0 IPA. Full AyuGram feature parity remains unfinished; see `FEATURE_MATRIX.md`.
-
-Configure your own `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` as Secure Codemagic variables in the `telegram_credentials` group. The Codemagic workflow checks these before building. The variables are not copied from GitHub secrets.
-
-Current pipeline outputs have **no provisioning profiles or distribution signature**. They require a separate signing/install process. A successful compile does not establish successful login, hidden network receipts or installation on an iPhone. No App Store/TestFlight publishing is configured.
-
-For local macOS preparation:
+## Local macOS Preparation
 
 ```sh
 git clone https://github.com/TelegramMessenger/Telegram-iOS.git telegram
@@ -136,20 +30,6 @@ git -C telegram checkout fb0e62ba8a147f0821da6aa63c09da7d79a10111
 python3 ci/prepare.py telegram
 ```
 
-Follow the pinned upstream README for signed development/distribution builds with your own bundle identity, team and provisioning profiles. The unsigned compilation identity used by CI is not an Apple signing identity.
+## License & Attribution
 
-## Attribution and source availability
-
-Based on [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS). Feature research references [AyuGram4A](https://github.com/AyuGram/AyuGram4A) and [AyuGramDesktop](https://github.com/AyuGram/AyuGramDesktop), maintained by their respective authors. The Swift adaptation is new code; Android/Desktop source files are not copied into this patch. Preserve upstream notices and comply with applicable source-distribution and dependency licenses before distributing binaries.
-
-Planning, feature scope, limitations and verification are recorded in the accompanying Markdown documents. Read their current status before treating a feature as tested.
-
-The authors are not responsible for any crashes, errors, or other issues. By installing the client, you acknowledge that you are aware of all the rules for using the application.
-
-Camera Flip native adapter and the supplied five-plugin dependency inventory: [bridge status](docs/ANDROID_PLUGIN_BRIDGES.md). Source changes require a new native build; the published IPA is unchanged.
-
-Chat Colors 1.0 now has a reviewed native adapter in development source: presets/HEX, brightness, profile/list menus and account-local color settings.
-
-The next source revision embeds CPython for an on-device AST converter: supported outgoing hooks become persisted native text programs, with if/else, chained replacements, case changes, strip and prefix/suffix operations. Original plugin code is not executed. See [conversion scope and build integration](docs/AST_CONVERTER.md). This block is separate from the existing Release 4 IPA.
-
-The next base IPA adds **Plugins → Update plugin list**. A signed OTA catalog can add exact-file native plugin adapters without another IPA; imports retain confirmation and installed plugins work offline. See [OTA catalog](docs/PLUGIN_CATALOG_OTA.md) and [publisher procedure](plugin-catalog/README.md). New native hooks still require a base app update.
+Based on [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS). Preserve upstream notices and comply with applicable licenses before distributing binaries.

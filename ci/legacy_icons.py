@@ -1,4 +1,4 @@
-"""Adds PNG copies of the VoidGram launcher icons to the unsigned IPA, for iOS older than 26.
+"""Adds PNG copies of the Nowzen launcher icons to the unsigned IPA, for iOS older than 26.
 
 The icons are Icon Composer bundles (`Ayu*.icon`), which iOS 26 draws. An older iOS finds no
 image for them and `setAlternateIconName` fails. Here every icon gets loose PNG files in the
@@ -54,7 +54,7 @@ def package(ipa, source, branding):
     declared = info.get("CFBundleIcons", {}).get("CFBundleAlternateIcons", {})
     files = {}
     added = []
-    with tempfile.TemporaryDirectory(prefix="voidgram-icons-") as folder:
+    with tempfile.TemporaryDirectory(prefix="nowzen-icons-") as folder:
         for name, image in icons.items():
             if name not in declared:
                 continue

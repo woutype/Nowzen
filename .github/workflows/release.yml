@@ -1,41 +1,14 @@
-# Publishes one GitHub release from builds that finished runs already made: no rebuild. The iOS
-# IPA is required; the desktop builds (Windows, Arch, the generic Linux .deb/.rpm/tarball) are added
-# when their run IDs are given, together with desktop/install.sh, the installer for every Linux.
-# The notes come from docs/releases/v<version>.md; sizes and SHA-256 of every file are appended,
-# and the release is tagged at the commit this workflow runs on (main): GITHUB_TOKEN may not create a
-# tag at an older commit whose workflow files differ from main's. The iOS run's commit is in the notes.
-name: Release
+name: Release (Manual)
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: VoidGram version, e.g. 27.8.3
+        description: Nowzen version, e.g. 1.0.1
         required: true
       run_id:
-        description: ID of the successful "Native iOS port" run whose IPA to publish (empty means a desktop-only release)
-        required: false
-        default: ''
-      windows_run:
-        description: ID of a "VoidGram Desktop (Windows)" run (optional)
-        required: false
-        default: ''
-      arch_run:
-        description: ID of a "VoidGram Desktop (Arch Linux)" run (optional)
-        required: false
-        default: ''
-      linux_run:
-        description: ID of a run with voidgram-desktop-linux-generic (Linux build or repack, optional)
-        required: false
-        default: ''
-      macos_run:
-        description: ID of a run with voidgram-desktop-macos-universal (macOS build or "from a finished build", optional)
-        required: false
-        default: ''
-      android_run:
-        description: ID of a "VoidGram Android" run (optional)
-        required: false
-        default: ''
+        description: ID of the successful "Nowzen iOS Build & Release" run whose IPA to publish
+        required: true
 
 permissions:
   contents: write
@@ -46,48 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - if: inputs.run_id != ''
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           run-id: ${{ inputs.run_id }}
           github-token: ${{ github.token }}
-          pattern: VoidGram-ios-*
+          pattern: Nowzen-ios-*
           path: artifact/ios
-      - if: inputs.windows_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ inputs.windows_run }}
-          github-token: ${{ github.token }}
-          name: voidgram-desktop-windows-x64
-          path: artifact/windows
-      - if: inputs.arch_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ inputs.arch_run }}
-          github-token: ${{ github.token }}
-          name: voidgram-desktop-linux-x86_64
-          path: artifact/arch
-      - if: inputs.linux_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ inputs.linux_run }}
-          github-token: ${{ github.token }}
-          name: voidgram-desktop-linux-generic
-          path: artifact/linux
-      - if: inputs.macos_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ inputs.macos_run }}
-          github-token: ${{ github.token }}
-          name: voidgram-desktop-macos-universal
-          path: artifact/macos
-      - if: inputs.android_run != ''
-        uses: actions/download-artifact@v4
-        with:
-          run-id: ${{ inputs.android_run }}
-          github-token: ${{ github.token }}
-          name: voidgram-android
-          path: artifact/android
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -95,49 +32,28 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          notes="docs/releases/v${VERSION}.md"
-          test -f "$notes" || { echo "::error::$notes is missing"; exit 1; }
           mkdir -p files
-          if [ -n "$RUN_ID" ]; then
-            ipa=$(find artifact/ios -name '*.ipa' | head -n 1)
-            test -n "$ipa" || { echo "::error::run $RUN_ID has no IPA"; exit 1; }
-            cp "$ipa" "files/VoidGram-${VERSION}.ipa"
-            tipa=$(find artifact/ios -name '*.tipa' | head -n 1)
-            if [ -n "$tipa" ]; then cp "$tipa" "files/VoidGram-${VERSION}-TrollStore.tipa"; fi
-          fi
-          find artifact/android -type f -name '*.apk' -exec cp {} files/ \; 2>/dev/null || true
-          find artifact/windows artifact/arch artifact/linux artifact/macos -type f \( -name '*.zip' -o -name '*.tar.zst' -o -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' \) -exec cp {} files/ \; 2>/dev/null || true
-          # Generic tarballs carry their own install.sh; the release one is the current installer.
-          if ls files/*.tar.zst files/*.deb files/*.rpm >/dev/null 2>&1; then
-            cp desktop/install.sh files/install.sh
-            chmod +x files/install.sh
-          fi
-          ls -la files
-          if [ -n "$RUN_ID" ]; then
-            sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_sha)
-            number=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .run_number)
-            footer="iOS: unsigned IPA, build ${number}, commit \`${sha}\`"
-          else
-            footer="Desktop only: no iOS build in this release."
-          fi
+          ipa=$(find artifact/ios -name '*.ipa' | head -n 1)
+          test -n "$ipa" || { echo "::error::run $RUN_ID has no IPA"; exit 1; }
+          cp "$ipa" "files/Nowzen-v${VERSION}.ipa"
+          tipa=$(find artifact/ios -name '*.tipa' | head -n 1 || true)
+          if [ -n "$tipa" ]; then cp "$tipa" "files/Nowzen-v${VERSION}-TrollStore.tipa"; fi
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_sha)
+          number=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .run_number)
           {
-            cat "$notes"
-            echo
-            echo "---"
-            echo
-            echo "$footer"
-            echo
+            echo "## Nowzen v${VERSION}"
+            echo ""
+            echo "iOS: build ${number}, commit \`${sha}\`"
+            echo ""
             echo "| File | Size | SHA-256 |"
             echo "|---|---|---|"
             for f in files/*; do
               echo "| $(basename "$f") | $(numfmt --to=iec --suffix=B "$(stat -c %s "$f")") | \`$(sha256sum "$f" | cut -d' ' -f1)\` |"
             done
           } > release-notes.md
-          # A release that exists already (an earlier run of this workflow) gets the new files over the old ones and
-          # the new notes; otherwise it is created.
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             gh release upload "v${VERSION}" files/* --clobber
-            gh release edit "v${VERSION}" --title "VoidGram ${VERSION}" --notes-file release-notes.md --latest
+            gh release edit "v${VERSION}" --title "Nowzen v${VERSION}" --notes-file release-notes.md --latest
           else
-            gh release create "v${VERSION}" files/* --target "$GITHUB_SHA" --title "VoidGram ${VERSION}" --notes-file release-notes.md --latest
+            gh release create "v${VERSION}" files/* --target "$GITHUB_SHA" --title "Nowzen v${VERSION}" --notes-file release-notes.md --latest
           fi
