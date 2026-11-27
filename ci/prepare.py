@@ -227,6 +227,65 @@ def apply_nowzen_branding(src: Path):
         )
         main_ctrl.write_text(text, encoding="utf-8")
 
+    # Fix jagged profile section corner artifacts with continuous CALayer mask
+    section_container = src / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift"
+    if section_container.is_file():
+        stext = section_container.read_text(encoding="utf-8")
+        old_mask_block = """        if clipsCorners && hasCorners {
+            let radius: CGFloat = 26.0
+            let panel = CGRect(x: 0.0, y: contentWithBackgroundOffset, width: width, height: max(0.0, contentWithBackgroundHeight - contentWithBackgroundOffset))
+            let path = UIBezierPath(rect: CGRect(x: 0.0, y: -1000.0, width: width, height: 1000.0 + panel.minY))
+            if panel.height / 2.0 <= radius {
+                // A one-row section is a full pill. UIBezierPath's rounded rect is a different, wider shape at
+                // this radius, and the row's own corners showed as dark slivers beside it (My Profile in Settings):
+                // true half-circles cut them.
+                path.append(UIBezierPath(cgPath: CGPath(roundedRect: panel, cornerWidth: panel.height / 2.0, cornerHeight: panel.height / 2.0, transform: nil)))
+            } else {
+                path.append(UIBezierPath(roundedRect: panel, cornerRadius: radius))
+            }
+            path.append(UIBezierPath(rect: CGRect(x: 0.0, y: panel.maxY, width: width, height: max(0.0, contentHeight - panel.maxY) + 1000.0)))
+            let mask = (self.itemContainerNode.layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+            mask.path = path.cgPath
+            self.itemContainerNode.layer.mask = mask
+            self.backgroundNode.cornerRadius = min(radius, panel.height / 2.0)
+            if #available(iOS 13.0, *) {
+                self.backgroundNode.layer.cornerCurve = panel.height / 2.0 <= radius ? .circular : .continuous
+            }
+        }"""
+        new_mask_block = """        if clipsCorners && hasCorners {
+            let radius: CGFloat = 26.0
+            let panel = CGRect(x: 0.0, y: contentWithBackgroundOffset, width: width, height: max(0.0, contentWithBackgroundHeight - contentWithBackgroundOffset))
+            let clampedRadius = min(radius, panel.height / 2.0)
+            let maskRoot: CALayer
+            if let existing = self.itemContainerNode.layer.mask, existing.sublayers?.count == 3 {
+                maskRoot = existing
+            } else {
+                maskRoot = CALayer()
+                for _ in 0 ..< 3 {
+                    let sub = CALayer()
+                    sub.backgroundColor = UIColor.black.cgColor
+                    maskRoot.addSublayer(sub)
+                }
+                self.itemContainerNode.layer.mask = maskRoot
+            }
+            if let subs = maskRoot.sublayers, subs.count == 3 {
+                subs[0].frame = CGRect(x: 0.0, y: -1000.0, width: width, height: 1000.0 + panel.minY)
+                subs[1].frame = panel
+                subs[1].cornerRadius = clampedRadius
+                if #available(iOS 13.0, *) {
+                    subs[1].cornerCurve = .continuous
+                }
+                subs[2].frame = CGRect(x: 0.0, y: panel.maxY, width: width, height: max(0.0, contentHeight - panel.maxY) + 1000.0)
+            }
+            self.backgroundNode.cornerRadius = clampedRadius
+            if #available(iOS 13.0, *) {
+                self.backgroundNode.layer.cornerCurve = .continuous
+            }
+        }"""
+        if old_mask_block in stext:
+            stext = stext.replace(old_mask_block, new_mask_block)
+            section_container.write_text(stext, encoding="utf-8")
+
     # 4. Update AyuAppIconCatalog.swift with all 16 Nowzen colorways
     catalog = src / "submodules/TelegramPresentationData/Sources/AyuAppIconCatalog.swift"
     if catalog.is_file():
