@@ -455,12 +455,13 @@ extension ChatControllerImpl {
         if let existing = self.nowzenSimCancelBanner {
             button = existing
         } else {
-            button = UIButton(type: .system)
+            var config = UIButton.Configuration.plain()
+            config.baseForegroundColor = UIColor(rgb: 0xF2F4F8)
+            config.image = UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13.0, weight: .medium))
+            config.imagePadding = 6.0
+            config.contentInsets = NSDirectionalEdgeInsets(top: 7.0, leading: 12.0, bottom: 7.0, trailing: 14.0)
+            button = UIButton(configuration: config, primaryAction: nil)
             button.backgroundColor = UIColor(rgb: 0x1E2027).withAlphaComponent(0.95)
-            button.tintColor = UIColor(rgb: 0xF2F4F8)
-            button.setTitleColor(UIColor(rgb: 0xF2F4F8), for: .normal)
-            button.titleLabel?.font = UIFont.systemFont(ofSize: 13.0, weight: .medium)
-            button.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 14.0, weight: .medium)), for: .normal)
             button.layer.cornerRadius = 16.0
             button.layer.cornerCurve = .continuous
             button.layer.borderWidth = 1.0 / UIScreen.main.scale
@@ -469,8 +470,6 @@ extension ChatControllerImpl {
             button.layer.shadowOpacity = 0.28
             button.layer.shadowRadius = 8.0
             button.layer.shadowOffset = CGSize(width: 0.0, height: 3.0)
-            button.contentEdgeInsets = UIEdgeInsets(top: 7.0, left: 12.0, bottom: 7.0, right: 14.0)
-            button.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -4.0, bottom: 0.0, right: 4.0)
             button.addTarget(self, action: #selector(self.nowzenCancelAllSimulationsPressed), for: .touchUpInside)
             self.view.addSubview(button)
             self.nowzenSimCancelBanner = button
@@ -479,7 +478,8 @@ extension ChatControllerImpl {
         if let simMode { parts.append(simMode.title(ru)) }
         if autoDel { parts.append(ru ? "Имитация блока" : "Auto-delete") }
         let stopLabel = ru ? "Отменить" : "Stop"
-        button.setTitle(" " + parts.joined(separator: " · ") + " — " + stopLabel, for: .normal)
+        let fullTitle = parts.joined(separator: " · ") + " — " + stopLabel
+        button.configuration?.attributedTitle = AttributedString(fullTitle, attributes: AttributeContainer([.font: UIFont.systemFont(ofSize: 13.0, weight: .medium)]))
         button.sizeToFit()
         let topInset = self.view.safeAreaInsets.top + 52.0
         button.frame = CGRect(x: floor((self.view.bounds.width - button.bounds.width) / 2.0), y: topInset, width: button.bounds.width, height: 32.0)
@@ -1272,7 +1272,7 @@ def _enhance_message_shot_native_look(src: Path) -> None:
     let format = UIGraphicsImageRendererFormat()
     format.scale = 1.0
     format.opaque = showBackground
-    let background = dark ? UIColor(rgb: 0x121317) : UIColor(rgb: 0xECEEF2)
+    let background = dark ? UIColor(red: 18.0 / 255.0, green: 19.0 / 255.0, blue: 23.0 / 255.0, alpha: 1.0) : UIColor(red: 236.0 / 255.0, green: 238.0 / 255.0, blue: 242.0 / 255.0, alpha: 1.0)
     let secondary = dark ? UIColor(white: 0.72, alpha: 0.85) : UIColor(white: 0.40, alpha: 0.9)
     return UIGraphicsImageRenderer(size: CGSize(width: width, height: totalHeight), format: format).image { rendererContext in
         if showBackground {
@@ -1284,12 +1284,12 @@ def _enhance_message_shot_native_look(src: Path) -> None:
         for (index, card) in cards.enumerated() {
             let (frame, textFrame, photoFrame) = layouts[index]
             let fill = dark
-                ? (card.outgoing ? UIColor(rgb: 0x2A2D37) : UIColor(rgb: 0x1B1D24))
-                : (card.outgoing ? UIColor(rgb: 0xE2E5EC) : .white)
+                ? (card.outgoing ? UIColor(red: 42.0 / 255.0, green: 45.0 / 255.0, blue: 55.0 / 255.0, alpha: 1.0) : UIColor(red: 27.0 / 255.0, green: 29.0 / 255.0, blue: 36.0 / 255.0, alpha: 1.0))
+                : (card.outgoing ? UIColor(red: 226.0 / 255.0, green: 229.0 / 255.0, blue: 236.0 / 255.0, alpha: 1.0) : .white)
             fill.setFill()
             UIBezierPath(roundedRect: frame, cornerRadius: 22.0).fill()
             if showAuthors {
-                let authorColor = dark ? UIColor(rgb: 0xD4D8E2) : UIColor(rgb: 0x2A2D37)
+                let authorColor = dark ? UIColor(red: 212.0 / 255.0, green: 216.0 / 255.0, blue: 226.0 / 255.0, alpha: 1.0) : UIColor(red: 42.0 / 255.0, green: 45.0 / 255.0, blue: 55.0 / 255.0, alpha: 1.0)
                 (card.author as NSString).draw(in: CGRect(x: frame.minX + horizontalPad, y: frame.minY + 12.0, width: frame.width - horizontalPad * 2.0, height: 28.0), withAttributes: [.font: UIFont.systemFont(ofSize: 22.0, weight: .semibold), .foregroundColor: authorColor])
             }
             card.text.draw(with: textFrame, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)

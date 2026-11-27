@@ -134,6 +134,21 @@ class TestNowzenEnhancements(unittest.TestCase):
                 (repo / cl_item_rel).read_text(encoding="utf-8"),
             )
 
+            import preflight
+            for rel in sorted(new_files | set(synthetic_upstream.keys())):
+                fpath = repo / rel
+                if fpath.is_file():
+                    errs = preflight.contract_errors(fpath.read_text(encoding="utf-8"), rel)
+                    self.assertEqual(errs, [], f"preflight.contract_errors failed for {rel}: {errs}")
+
+            # Ensure no replacement string in nowzen_enhancements.py introduces trailing whitespace (git diff --check)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "_replace_once":
+                    new_str = ast.literal_eval(node.args[2])
+                    label = ast.literal_eval(node.args[3])
+                    for idx, line in enumerate(new_str.splitlines(), 1):
+                        self.assertEqual(line, line.rstrip(" \t"), f"Trailing whitespace in '{label}' line {idx}")
+
 
 if __name__ == "__main__":
     unittest.main()
