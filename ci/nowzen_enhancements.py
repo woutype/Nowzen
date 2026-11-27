@@ -681,7 +681,7 @@ def _enhance_settings_stability_and_grouping(src: Path) -> None:
         "fix_extras_duplicate_id_35_handler",
     )
 
-    # Improve Russian labels and grouping in AyuCategoriesController
+    # Compact, balanced, duplicate-free organization of categories with clear Russian subtitles
     cat_path = src / "submodules/SettingsUI/Sources/AyuCategoriesController.swift"
     _replace_once(
         cat_path,
@@ -695,15 +695,30 @@ def _enhance_settings_stability_and_grouping(src: Path) -> None:
         ]""",
         """    case .privacy:
         return [
-            AyuCategoryItem(id: 1, symbol: "eye.slash.fill", color: 0x8E5CF7, titleRu: "Режим призрака", titleEn: "Ghost Mode", subtitleRu: "Общий тумблер, чтение, онлайн, истории", subtitleEn: "Global switch, read receipts, online, stories", open: page { ayuGhostModeController(context: $0) }),
-            AyuCategoryItem(id: 2, symbol: "eye.trianglebadge.exclamationmark.fill", color: 0x5856D6, titleRu: "Тонкая настройка призрака", titleEn: "Ghost Mode+", subtitleRu: "Исключения и призрак по чатам", subtitleEn: "Fine-tuning & per-chat rules", open: page { ayuGhostModePlusController(context: $0) }),
-            AyuCategoryItem(id: 3, symbol: "person.crop.circle.badge.checkmark", color: 0x8E5CF7, titleRu: "Призрак по чатам", titleEn: "Ghost Mode by chat", subtitleRu: "Переопределить для отдельных чатов", subtitleEn: "On or off in single chats", open: page { ayuGhostExceptionsController(context: $0) }),
-            AyuCategoryItem(id: 4, symbol: "figure.walk.motion", color: 0x34C759, titleRu: "Активность и анонимность", titleEn: "Activity & traces", subtitleRu: "Статусы, истории, локальное чтение, номер", subtitleEn: "Statuses, stories, read locally, number", open: page { ayuPrivacyPlusController(context: $0) }),
-            AyuCategoryItem(id: 5, symbol: "lock.shield.fill", color: 0xFF9500, titleRu: "Защита чатов и Face ID", titleEn: "Chat protection", subtitleRu: "Face ID на чаты, скрытые чаты, скриншоты", subtitleEn: "Face ID chats, hidden chats, screenshots", open: page { ayuChatProtectionController(context: $0) }),
-            AyuCategoryItem(id: 6, symbol: "theatermasks.fill", color: 0x5856D6, titleRu: "Чистый Telegram (приманка)", titleEn: "Clean Telegram (Decoy)", subtitleRu: "Скрыть все функции Nowzen и второй аккаунт", subtitleEn: "Hide Nowzen features or use decoy account", open: page { ayuDecoySettingsController(context: $0) }),
-            AyuCategoryItem(id: 7, symbol: "hand.raised.fill", color: 0x34C759, titleRu: "Дополнительная приватность", titleEn: "Privacy & extras", subtitleRu: "Метаданные, чистые ссылки, уведомления об удалениях", subtitleEn: "Metadata, clean links, deletion alerts", open: page { ayuExtrasController(context: $0) })
+            AyuCategoryItem(id: 1, symbol: "eye.slash.fill", color: 0x8E5CF7, titleRu: "Режим призрака", titleEn: "Ghost Mode", subtitleRu: "Прочтения, онлайн, набор, анонимные истории", subtitleEn: "Read receipts, online, typing, anonymous stories", open: page { ayuGhostModeController(context: $0) }),
+            AyuCategoryItem(id: 2, symbol: "eye.trianglebadge.exclamationmark.fill", color: 0x5856D6, titleRu: "Тонкая настройка призрака", titleEn: "Ghost Mode+", subtitleRu: "Доп. параметры скрытности", subtitleEn: "Fine-tuning", open: page { ayuGhostModePlusController(context: $0) }),
+            AyuCategoryItem(id: 3, symbol: "person.crop.circle.badge.checkmark", color: 0x8E5CF7, titleRu: "Призрак по чатам", titleEn: "Ghost Mode by chat", subtitleRu: "Исключения для отдельных чатов", subtitleEn: "On or off in single chats", open: page { ayuGhostExceptionsController(context: $0) }),
+            AyuCategoryItem(id: 4, symbol: "figure.walk.motion", color: 0x34C759, titleRu: "Активность и следы", titleEn: "Activity & traces", subtitleRu: "Статусы, всегда онлайн, истории, номер", subtitleEn: "Statuses, always online, read locally, stories, number", open: page { ayuPrivacyPlusController(context: $0) }),
+            AyuCategoryItem(id: 5, symbol: "hand.raised.fill", color: 0x34C759, titleRu: "Приватность и уведомления", titleEn: "Privacy & extras", subtitleRu: "Метаданные, ссылки, уведомления об удалениях", subtitleEn: "Metadata, clean links, deletion alerts", open: page { ayuExtrasController(context: $0) })
         ]""",
         "reorganize_privacy_category_items",
+    )
+    _replace_once(
+        cat_path,
+        """    case .security:
+        return [
+            AyuCategoryItem(id: 51, symbol: "lock.fill", color: 0xFF9500, titleRu: "Защита чатов", titleEn: "Chat protection", subtitleRu: "Face ID на чаты, скрытые чаты, скриншоты", subtitleEn: "Face ID chats, hidden chats, screenshots", open: page { ayuChatProtectionController(context: $0) }),
+            AyuCategoryItem(id: 52, symbol: "theatermasks.fill", color: 0x5856D6, titleRu: "Режим-приманка и двойное дно", titleEn: "Decoy & hidden account", subtitleRu: "Второй аккаунт за отдельным кодом", subtitleEn: "A second account behind its own code", open: page { ayuDecoySettingsController(context: $0) }),
+            AyuCategoryItem(id: 53, symbol: "person.2.fill", color: 0x007AFF, titleRu: "Аккаунты", titleEn: "Accounts", subtitleRu: "Настройки AyuGram для каждого аккаунта", subtitleEn: "AyuGram settings per account", open: page { ayuAccountsSettingsController(context: $0) })
+        ]""",
+        """    case .security:
+        return [
+            AyuCategoryItem(id: 51, symbol: "lock.shield.fill", color: 0xFF9500, titleRu: "Защита чатов и Face ID", titleEn: "Chat protection", subtitleRu: "Блокировка чатов Face ID, скрытые чаты", subtitleEn: "Face ID chats, hidden chats, screenshots", open: page { ayuChatProtectionController(context: $0) }),
+            AyuCategoryItem(id: 52, symbol: "theatermasks.fill", color: 0x5856D6, titleRu: "Чистый Telegram (приманка)", titleEn: "Decoy & hidden account", subtitleRu: "Скрыть моды или открыть второй аккаунт", subtitleEn: "Hide mods or use second account", open: page { ayuDecoySettingsController(context: $0) }),
+            AyuCategoryItem(id: 53, symbol: "person.2.fill", color: 0x007AFF, titleRu: "Аккаунты", titleEn: "Accounts", subtitleRu: "Отдельные настройки Nowzen по аккаунтам", subtitleEn: "Nowzen settings per account", open: page { ayuAccountsSettingsController(context: $0) }),
+            AyuCategoryItem(id: 54, symbol: "person.crop.square.fill", color: 0x8E8E93, titleRu: "Профиль, ID и дата-центр", titleEn: "Profile & settings", subtitleRu: "Отображение ID, DC и даты регистрации", subtitleEn: "ID, data center, dates and Settings rows", open: page { ayuSettingsCategoryController(context: $0, category: 3) })
+        ]""",
+        "reorganize_security_category_items",
     )
 
 
