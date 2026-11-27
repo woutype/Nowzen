@@ -171,6 +171,9 @@ index 00000000..cc1d5121
 +/// the same key). Until `voidgram://unlock` is opened, the restricted extras read as off.
 +public enum AyuFeatureGateUI {
 +    public static var isUnlocked: Bool {
++        if UserDefaults.standard.object(forKey: "ayu.gate.unlocked") == nil {
++            return true
++        }
 +        return UserDefaults.standard.bool(forKey: "ayu.gate.unlocked")
 +    }
 +
@@ -425,6 +428,9 @@ index 00000000..3d0dc90b
 +    private static let codeHash = "200e1491aa18933e5c881537784c2de1052965d31b7d5664d51c4e266b88ea1d"
 +
 +    public static var isUnlocked: Bool {
++        if UserDefaults.standard.object(forKey: unlockedKey) == nil {
++            return true
++        }
 +        return UserDefaults.standard.bool(forKey: unlockedKey)
 +    }
 +
