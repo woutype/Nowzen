@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from port_sources import missing_port_sources
+from nowzen_enhancements import apply_nowzen_enhancements
 
 parser = argparse.ArgumentParser()
 parser.add_argument("source", type=Path)
@@ -351,6 +352,7 @@ public enum AyuAppIconCatalog {
             fpath.write_text(updated, encoding="utf-8")
 
 
+apply_nowzen_enhancements(source)
 apply_nowzen_branding(source)
 
 missing = missing_port_sources(source)
