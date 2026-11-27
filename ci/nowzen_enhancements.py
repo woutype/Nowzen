@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post-patch Nowzen UX, stability, privacy, and feature enhancements."""
+"""Post-patch Nowzen UX, stability, privacy, tracker, simulator, and UI enhancements."""
 from pathlib import Path
 
 
@@ -98,6 +98,15 @@ def _enhance_app_extras_defaults(src: Path) -> None:
     path = src / "submodules/TelegramUI/Sources/AyuAppExtras.swift"
     _replace_once(
         path,
+        """        AyuCrashReports.shared.start()
+        AyuAccountAccent.install(sharedContext: sharedContext)""",
+        """        AyuCrashReports.shared.start()
+        NowzenOnlineTracker.shared.install(sharedContext: sharedContext)
+        AyuAccountAccent.install(sharedContext: sharedContext)""",
+        "install_nowzen_online_tracker",
+    )
+    _replace_once(
+        path,
         """                if preset == 0 {
                     for key in [AyuExtras.Key.spoofPhotoMetadata, .randomFileNames, .cleanLinks, .blurInAppSwitcher] {
                         AyuExtras.set(key, true)
@@ -114,7 +123,6 @@ def _enhance_app_extras_defaults(src: Path) -> None:
 
 
 def _enhance_chat_privacy_and_face_id(src: Path) -> None:
-    # 1. Add centralized Face ID authentication helper to AyuChatPrivacy
     privacy_path = src / "submodules/Display/Source/AyuChatPrivacy.swift"
     _replace_once(
         privacy_path,
@@ -149,7 +157,6 @@ def _enhance_chat_privacy_and_face_id(src: Path) -> None:
         "chat_privacy_authenticate_helper",
     )
 
-    # 2. Require Face ID before removing Face ID lock in ChatList context menu
     menus_path = src / "submodules/ChatListUI/Sources/ChatContextMenus.swift"
     _replace_once(
         menus_path,
@@ -174,7 +181,6 @@ def _enhance_chat_privacy_and_face_id(src: Path) -> None:
         "require_faceid_before_unlock",
     )
 
-    # 3. Fix ChatLockView freezing, stray taps behind overlay, and duplicate auth calls
     lock_path = src / "submodules/TelegramUI/Sources/AyuChatLock.swift"
     _replace_once(
         lock_path,
@@ -218,6 +224,97 @@ def _enhance_chat_privacy_and_face_id(src: Path) -> None:
     }
 }""",
         """private var ayuChatLockAuthenticatingKey: UInt8 = 0
+private var ayuChatSimBannerKey: UInt8 = 0
+private var ayuChatSimBarButtonKey: UInt8 = 0
+
+public final class NowzenChatSimulator {
+    public static let shared = NowzenChatSimulator()
+    public static let didChangeNotification = Notification.Name("Nowzen.ChatSimulatorChanged")
+
+    public enum ActivityMode {
+        case typing
+        case voice
+        case roundVideo
+
+        public func title(_ ru: Bool) -> String {
+            switch self {
+            case .typing: return ru ? "Печатает…" : "Typing…"
+            case .voice: return ru ? "Запись голосового…" : "Recording voice…"
+            case .roundVideo: return ru ? "Запись кружка…" : "Recording video note…"
+            }
+        }
+
+        public var peerActivity: PeerInputActivity {
+            switch self {
+            case .typing: return .typingText
+            case .voice: return .recordingVoice
+            case .roundVideo: return .recordingInstantVideo
+            }
+        }
+    }
+
+    private struct Session {
+        let mode: ActivityMode
+        let endsAt: Date?
+        let timer: Timer
+    }
+
+    private var sessions: [Int64: Session] = [:]
+    private let autoDeleteKey = "nowzen.sim.autoDeletePeers"
+
+    public func isAutoDeleteEnabled(peerId: Int64) -> Bool {
+        let arr = (UserDefaults.standard.array(forKey: autoDeleteKey) as? [NSNumber])?.map(\\.int64Value) ?? []
+        return arr.contains(peerId)
+    }
+
+    public func setAutoDelete(peerId: Int64, enabled: Bool) {
+        var set = Set((UserDefaults.standard.array(forKey: autoDeleteKey) as? [NSNumber])?.map(\\.int64Value) ?? [])
+        if enabled { set.insert(peerId) } else { set.remove(peerId) }
+        UserDefaults.standard.set(Array(set).sorted().map { NSNumber(value: $0) }, forKey: autoDeleteKey)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+    }
+
+    public func activeMode(peerId: Int64) -> ActivityMode? {
+        return sessions[peerId]?.mode
+    }
+
+    public func hasAnyActiveState(peerId: Int64) -> Bool {
+        return sessions[peerId] != nil || isAutoDeleteEnabled(peerId: peerId)
+    }
+
+    public func startSimulation(context: AccountContext, peerId: EnginePeer.Id, mode: ActivityMode, durationSeconds: TimeInterval?) {
+        let raw = peerId.toInt64()
+        stopSimulation(context: context, peerId: peerId)
+        let endsAt = durationSeconds.map { Date().addingTimeInterval($0) }
+        let sendOnce = { [weak self] in
+            if let endsAt, Date() >= endsAt {
+                self?.stopSimulation(context: context, peerId: peerId)
+                return
+            }
+            let _ = context.engine.messages.ayuSendSimulatedActivity(peerId: peerId, activity: mode.peerActivity).startStandalone()
+        }
+        sendOnce()
+        let timer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { _ in
+            sendOnce()
+        }
+        sessions[raw] = Session(mode: mode, endsAt: endsAt, timer: timer)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+    }
+
+    public func stopSimulation(context: AccountContext, peerId: EnginePeer.Id) {
+        let raw = peerId.toInt64()
+        if let existing = sessions.removeValue(forKey: raw) {
+            existing.timer.invalidate()
+            let _ = context.engine.messages.ayuSendSimulatedActivity(peerId: peerId, activity: nil).startStandalone()
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+        }
+    }
+
+    public func stopAllForPeer(context: AccountContext, peerId: EnginePeer.Id) {
+        stopSimulation(context: context, peerId: peerId)
+        setAutoDelete(peerId: peerId.toInt64(), enabled: false)
+    }
+}
 
 extension ChatControllerImpl {
     private var ayuIsAuthenticatingLock: Bool {
@@ -225,8 +322,126 @@ extension ChatControllerImpl {
         set { objc_setAssociatedObject(self, &ayuChatLockAuthenticatingKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
     }
 
+    var nowzenSimBarButton: UIBarButtonItem? {
+        get { objc_getAssociatedObject(self, &ayuChatSimBarButtonKey) as? UIBarButtonItem }
+        set { objc_setAssociatedObject(self, &ayuChatSimBarButtonKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+
+    private var nowzenSimCancelBanner: UIButton? {
+        get { objc_getAssociatedObject(self, &ayuChatSimBannerKey) as? UIButton }
+        set { objc_setAssociatedObject(self, &ayuChatSimBannerKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+    }
+
+    func nowzenUpdateSimulationBanner() {
+        guard let peerId = self.chatLocation.peerId, !AyuDecoyMode.isActive else {
+            self.nowzenSimCancelBanner?.isHidden = true
+            return
+        }
+        let raw = peerId.toInt64()
+        let simMode = NowzenChatSimulator.shared.activeMode(peerId: raw)
+        let autoDel = NowzenChatSimulator.shared.isAutoDeleteEnabled(peerId: raw)
+        guard simMode != nil || autoDel else {
+            self.nowzenSimCancelBanner?.isHidden = true
+            return
+        }
+        let ru = Locale.preferredLanguages.first?.hasPrefix("ru") == true
+        let button: UIButton
+        if let existing = self.nowzenSimCancelBanner {
+            button = existing
+        } else {
+            button = UIButton(type: .system)
+            button.backgroundColor = UIColor.systemRed.withAlphaComponent(0.92)
+            button.setTitleColor(.white, for: .normal)
+            button.titleLabel?.font = UIFont.systemFont(ofSize: 13.0, weight: .semibold)
+            button.layer.cornerRadius = 16.0
+            button.layer.cornerCurve = .continuous
+            button.contentEdgeInsets = UIEdgeInsets(top: 7.0, left: 14.0, bottom: 7.0, right: 14.0)
+            button.addTarget(self, action: #selector(self.nowzenCancelAllSimulationsPressed), for: .touchUpInside)
+            self.view.addSubview(button)
+            self.nowzenSimCancelBanner = button
+        }
+        var parts: [String] = []
+        if let simMode { parts.append(simMode.title(ru)) }
+        if autoDel { parts.append(ru ? "Имитация блока" : "Auto-delete") }
+        let stopLabel = ru ? "✕ Отменить" : "✕ Stop"
+        button.setTitle(parts.joined(separator: " · ") + "  " + stopLabel, for: .normal)
+        button.sizeToFit()
+        let topInset = self.view.safeAreaInsets.top + 52.0
+        button.frame = CGRect(x: floor((self.view.bounds.width - button.bounds.width) / 2.0), y: topInset, width: button.bounds.width, height: 32.0)
+        button.isHidden = false
+        self.view.bringSubviewToFront(button)
+    }
+
+    @objc func nowzenCancelAllSimulationsPressed() {
+        guard let peerId = self.chatLocation.peerId else { return }
+        NowzenChatSimulator.shared.stopAllForPeer(context: self.context, peerId: peerId)
+        self.nowzenUpdateSimulationBanner()
+    }
+
+    @objc func nowzenChatSimButtonPressed() {
+        guard let peerId = self.chatLocation.peerId, !AyuDecoyMode.isActive else { return }
+        let raw = peerId.toInt64()
+        let ru = Locale.preferredLanguages.first?.hasPrefix("ru") == true
+        let sheet = UIAlertController(title: ru ? "Имитация и действия" : "Simulation & Actions", message: nil, preferredStyle: .actionSheet)
+
+        if NowzenChatSimulator.shared.hasAnyActiveState(peerId: raw) {
+            sheet.addAction(UIAlertAction(title: ru ? "⛔ Отменить активную имитацию / блок" : "⛔ Stop active simulation / auto-delete", style: .destructive, handler: { [weak self] _ in
+                guard let self else { return }
+                NowzenChatSimulator.shared.stopAllForPeer(context: self.context, peerId: peerId)
+                self.nowzenUpdateSimulationBanner()
+            }))
+        }
+
+        let pickDuration: (NowzenChatSimulator.ActivityMode) -> Void = { [weak self] mode in
+            guard let self else { return }
+            let durSheet = UIAlertController(title: mode.title(ru), message: ru ? "Выберите длительность имитации" : "Choose simulation duration", preferredStyle: .actionSheet)
+            let options: [(String, TimeInterval?)] = [
+                (ru ? "1 минута" : "1 minute", 60),
+                (ru ? "3 минуты" : "3 minutes", 180),
+                (ru ? "5 минут" : "5 minutes", 300),
+                (ru ? "15 минут" : "15 minutes", 900),
+                (ru ? "30 минут" : "30 minutes", 1800),
+                (ru ? "Бесконечно (до отмены)" : "Until stopped", nil)
+            ]
+            for (label, seconds) in options {
+                durSheet.addAction(UIAlertAction(title: label, style: .default, handler: { [weak self] _ in
+                    guard let self else { return }
+                    NowzenChatSimulator.shared.startSimulation(context: self.context, peerId: peerId, mode: mode, durationSeconds: seconds)
+                    self.nowzenUpdateSimulationBanner()
+                }))
+            }
+            durSheet.addAction(UIAlertAction(title: ru ? "Отмена" : "Cancel", style: .cancel))
+            if let pop = durSheet.popoverPresentationController {
+                pop.sourceView = self.view
+                pop.sourceRect = CGRect(x: self.view.bounds.midX, y: 80.0, width: 1.0, height: 1.0)
+            }
+            self.context.sharedContext.applicationBindings.presentNativeController(durSheet)
+        }
+
+        sheet.addAction(UIAlertAction(title: ru ? "⌨️ Имитация: печатает…" : "⌨️ Simulate typing…", style: .default, handler: { _ in pickDuration(.typing) }))
+        sheet.addAction(UIAlertAction(title: ru ? "🎤 Имитация: запись голосового…" : "🎤 Simulate voice recording…", style: .default, handler: { _ in pickDuration(.voice) }))
+        sheet.addAction(UIAlertAction(title: ru ? "📹 Имитация: запись кружка…" : "📹 Simulate round video…", style: .default, handler: { _ in pickDuration(.roundVideo) }))
+
+        let autoDel = NowzenChatSimulator.shared.isAutoDeleteEnabled(peerId: raw)
+        let blockTitle = autoDel
+            ? (ru ? "🛡 Выключить имитацию блока (авто-удаление)" : "🛡 Disable block simulation (auto-delete)")
+            : (ru ? "🚫 Имитация блока (авто-удалять его сообщения)" : "🚫 Simulate block (auto-delete incoming)")
+        sheet.addAction(UIAlertAction(title: blockTitle, style: autoDel ? .default : .destructive, handler: { [weak self] _ in
+            NowzenChatSimulator.shared.setAutoDelete(peerId: raw, enabled: !autoDel)
+            self?.nowzenUpdateSimulationBanner()
+        }))
+
+        sheet.addAction(UIAlertAction(title: ru ? "Отмена" : "Cancel", style: .cancel))
+        if let pop = sheet.popoverPresentationController {
+            pop.sourceView = self.view
+            pop.sourceRect = CGRect(x: self.view.bounds.midX, y: 80.0, width: 1.0, height: 1.0)
+        }
+        self.context.sharedContext.applicationBindings.presentNativeController(sheet)
+    }
+
     /// Covers a locked chat and asks for Face ID / Touch ID (or the device passcode).
     func ayuApplyChatLock() {
+        self.nowzenUpdateSimulationBanner()
         guard let peerId = self.chatLocation.peerId else { return }
         let value = peerId.toInt64()
         guard AyuChatPrivacy.isLocked(value), !AyuChatPrivacy.isUnlocked(value) else { return }
@@ -269,26 +484,61 @@ extension ChatControllerImpl {
         }
     }
 }""",
-        "fix_chat_lock_interaction_and_hang",
+        "fix_chat_lock_and_add_simulator",
     )
 
 
-def _enhance_ghost_mode_and_stories(src: Path) -> None:
-    # 1. Disable per-chat ghost button by default (replaced by global chat-list button)
-    settings_path = src / "submodules/TelegramCore/Sources/AyuGram/AyuGhostModeSettings.swift"
+def _enhance_ghost_mode_stories_and_chat_buttons(src: Path) -> None:
+    # 1. Hide per-chat ghost button by default (unless explicitly opted in), add Nowzen Simulator button in chat header
+    nav_path = src / "submodules/TelegramUI/Sources/Chat/UpdateChatPresentationInterfaceState.swift"
     _replace_once(
-        settings_path,
-        "    public var showGhostButton = true",
-        "    public var showGhostButton = false",
-        "default_hide_per_chat_ghost_button",
+        nav_path,
+        """        if case .standard(.default) = self.mode, presentationInterfaceState.interfaceState.selectionState == nil, let ghostPeerId = self.chatLocation.peerId, ghostPeerId.namespace != Namespaces.Peer.SecretChat, self.context.account.network.ayuGhostMode.current.appearance.showGhostButton {""",
+        """        if case .standard(.default) = self.mode, presentationInterfaceState.interfaceState.selectionState == nil, let simPeerId = self.chatLocation.peerId, simPeerId.namespace != Namespaces.Peer.SecretChat, !AyuDecoyMode.isActive {
+            let simActive = NowzenChatSimulator.shared.hasAnyActiveState(peerId: simPeerId.toInt64())
+            let simIcon = UIImage(systemName: simActive ? "stop.circle.fill" : "wand.and.stars", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18.0, weight: .medium))
+            let simBtn = self.nowzenSimBarButton ?? UIBarButtonItem(image: simIcon, style: .plain, target: self, action: #selector(self.nowzenChatSimButtonPressed))
+            simBtn.image = simIcon
+            simBtn.target = self
+            simBtn.action = #selector(self.nowzenChatSimButtonPressed)
+            simBtn.setCustomAction({ [weak self] in self?.nowzenChatSimButtonPressed() })
+            simBtn.tintColor = simActive ? .systemRed : presentationInterfaceState.theme.rootController.navigationBar.primaryTextColor
+            self.nowzenSimBarButton = simBtn
+            rightBarButtons.insert(simBtn, at: 0)
+            self.nowzenUpdateSimulationBanner()
+        }
+        if case .standard(.default) = self.mode, presentationInterfaceState.interfaceState.selectionState == nil, let ghostPeerId = self.chatLocation.peerId, ghostPeerId.namespace != Namespaces.Peer.SecretChat, UserDefaults.standard.bool(forKey: "ayu.chat.showHeaderGhostButton") && self.context.account.network.ayuGhostMode.current.appearance.showGhostButton {""",
+        "chat_header_sim_button_and_hide_per_chat_ghost",
     )
 
-    # 2. Tie anonymous story viewing explicitly to Ghost Mode
-    story_path = src / "submodules/TelegramCore/Sources/AyuGram/AyuStoryPrivacy.swift"
-    if story_path.is_file():
-        _replace_once(
-            story_path,
-            """    public static var isEnabled: Bool {
+    # 2. Expose ayuSendSimulatedActivity in ManagedLocalInputActivities.swift
+    act_path = src / "submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift"
+    _replace_once(
+        act_path,
+        """private func requestActivity(postbox: Postbox, network: Network, accountPeerId: PeerId, peerId: PeerId, threadId: Int64?, activity: PeerInputActivity?) -> Signal<Void, NoError> {
+    return postbox.transaction { transaction -> Signal<Void, NoError> in
+        if let activity, ayuSuppressInputActivity(activity, settings: network.ayuGhostMode.current.effective(forPeer: peerId.toInt64())) {
+            return .complete()
+        }""",
+        """public extension TelegramEngine.Messages {
+    func ayuSendSimulatedActivity(peerId: EnginePeer.Id, activity: PeerInputActivity?) -> Signal<Void, NoError> {
+        return requestActivity(postbox: self.account.postbox, network: self.account.network, accountPeerId: self.account.peerId, peerId: peerId, threadId: nil, activity: activity, force: true)
+    }
+}
+
+private func requestActivity(postbox: Postbox, network: Network, accountPeerId: PeerId, peerId: PeerId, threadId: Int64?, activity: PeerInputActivity?, force: Bool = false) -> Signal<Void, NoError> {
+    return postbox.transaction { transaction -> Signal<Void, NoError> in
+        if !force, let activity, ayuSuppressInputActivity(activity, settings: network.ayuGhostMode.current.effective(forPeer: peerId.toInt64())) {
+            return .complete()
+        }""",
+        "expose_simulated_activity_engine_api",
+    )
+
+    # 3. Tie anonymous story viewing explicitly to Ghost Mode in AyuActivityPrivacy.swift
+    story_path = src / "submodules/TelegramCore/Sources/AyuGram/AyuActivityPrivacy.swift"
+    _replace_once(
+        story_path,
+        """    public static var isEnabled: Bool {
         get { return UserDefaults.standard.bool(forKey: key) }
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
@@ -296,7 +546,7 @@ def _enhance_ghost_mode_and_stories(src: Path) -> None:
     public static func hidesViews(_ network: Network) -> Bool {
         return isEnabled && !AyuDecoyState.isActive && network.ayuGhostMode.current.hideReadReceipts
     }""",
-            """    public static var isEnabled: Bool {
+        """    public static var isEnabled: Bool {
         get { return UserDefaults.standard.object(forKey: key) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
@@ -304,10 +554,10 @@ def _enhance_ghost_mode_and_stories(src: Path) -> None:
     public static func hidesViews(_ network: Network) -> Bool {
         return isEnabled && !AyuDecoyState.isActive && network.ayuGhostMode.current.isActive
     }""",
-            "explicit_story_privacy_with_ghost_mode",
-        )
+        "explicit_story_privacy_with_ghost_mode",
+    )
 
-    # 3. Add global Ghost Mode floating toggle button in ChatListController
+    # 4. Add global Ghost Mode floating toggle button in ChatListController
     cl_path = src / "submodules/ChatListUI/Sources/ChatListController.swift"
     _replace_once(
         cl_path,
@@ -383,10 +633,61 @@ def _enhance_ghost_mode_and_stories(src: Path) -> None:
     )
 
 
+def _enhance_compact_chat_list_and_activity_hook(src: Path) -> None:
+    # 1. Default compactChatList to true (SwiftGram-style compact rows out of the box, configurable in Chat List settings)
+    wg_path = src / "submodules/Display/Source/AyuWhiteGram.swift"
+    _replace_once(
+        wg_path,
+        """    public static var compactChatList: Bool { return bool("compactChatList") }""",
+        """    public static var compactChatList: Bool { return UserDefaults.standard.object(forKey: prefix + "compactChatList") as? Bool ?? true }""",
+        "default_compact_chat_list_enabled",
+    )
+
+    # 2. Apply compact 50pt avatar/row geometry when compactChatList is active + emit incoming typing activity notifications
+    item_path = src / "submodules/ChatListUI/Sources/Node/ChatListItem.swift"
+    old_diam = """            // VoidGram classic design: the old list's smaller avatars; the text starts at 70 pt.
+            if AyuAppearancePlus.launchClassicDesign, !item.useCommunityViewLayout {
+                avatarDiameter = min(46.0, avatarDiameter)
+            }"""
+    new_diam = """            // VoidGram classic design / Nowzen compact chat list (SwiftGram-like compact rows).
+            if AyuAppearancePlus.launchClassicDesign, !item.useCommunityViewLayout {
+                avatarDiameter = min(46.0, avatarDiameter)
+            } else if AyuWhiteGram.compactChatList, !item.useCommunityViewLayout {
+                avatarDiameter = min(50.0, avatarDiameter)
+            }"""
+    text = item_path.read_text(encoding="utf-8")
+    if text.count(old_diam) < 2:
+        raise ValueError("Expected at least 2 avatarDiameter anchors in ChatListItem.swift")
+    text = text.replace(old_diam, new_diam, 2)
+    item_path.write_text(text, encoding="utf-8")
+
+    _replace_once(
+        item_path,
+        """                    let inputActivitiesValue = peerData.inputActivities""",
+        """                    let inputActivitiesValue = peerData.inputActivities
+                    if !AyuDecoyMode.isActive, UserDefaults.standard.bool(forKey: "ayu.extra.notifyActivity"), let firstAct = inputActivitiesValue?.first {
+                        let actDesc: String
+                        let ruAct = item.presentationData.strings.baseLanguageCode.hasPrefix("ru")
+                        switch firstAct.1 {
+                        case .recordingVoice: actDesc = ruAct ? "записывает голосовое 🎤" : "is recording a voice message 🎤"
+                        case .recordingInstantVideo: actDesc = ruAct ? "записывает кружочек 📹" : "is recording a video note 📹"
+                        case .uploadingPhoto: actDesc = ruAct ? "отправляет фото 📷" : "is sending a photo 📷"
+                        case .uploadingVideo, .uploadingInstantVideo: actDesc = ruAct ? "отправляет видео 🎬" : "is sending a video 🎬"
+                        default: actDesc = ruAct ? "печатает… ⌨️" : "is typing… ⌨️"
+                        }
+                        NotificationCenter.default.post(name: Notification.Name("Nowzen.PeerInputActivityObserved"), object: nil, userInfo: [
+                            "peerId": firstAct.0.id.toInt64(),
+                            "name": firstAct.0.compactDisplayTitle,
+                            "action": actDesc
+                        ])
+                    }""",
+        "chatlist_observe_input_activities",
+    )
+
+
 def _enhance_deleted_and_view_once_media(src: Path) -> None:
     history_path = src / "submodules/TelegramCore/Sources/AyuGram/AyuMessageHistory.swift"
 
-    # 1. Support all common media types (video notes, voice, stickers, photos, videos, files, contacts, locations)
     _replace_once(
         history_path,
         """private func ayuHistorySupportedMedia(_ media: [Media]) -> Bool {
@@ -400,7 +701,6 @@ def _enhance_deleted_and_view_once_media(src: Path) -> None:
         "history_support_all_media",
     )
 
-    # 2. Allow archiving expiring/ephemeral messages (round videos, voice, view-once, auto-delete)
     _replace_once(
         history_path,
         """    if !peerAllows {
@@ -412,7 +712,6 @@ def _enhance_deleted_and_view_once_media(src: Path) -> None:
         "allow_archiving_expiring_media",
     )
 
-    # 3. Retain original media (video notes, voice, photos, videos) in deleted tombstones instead of replacing with 📎/📷!
     _replace_once(
         history_path,
         """        var attributes = previous.attributes.filter {
@@ -441,7 +740,6 @@ def _enhance_deleted_and_view_once_media(src: Path) -> None:
         "retain_media_in_deleted_tombstones",
     )
 
-    # 4. In SecretMediaPreviewController: don't burn view-once media if Ghost Mode is active or saveViewOnce+viewOnceReview is enabled
     secret_preview_path = src / "submodules/GalleryUI/Sources/SecretMediaPreviewController.swift"
     _replace_once(
         secret_preview_path,
@@ -457,9 +755,40 @@ def _enhance_deleted_and_view_once_media(src: Path) -> None:
     )
 
 
-def _enhance_history_notifications_and_context_menu(src: Path) -> None:
-    # 1. Show old -> new text in edit notifications
+def _enhance_tracker_notifications_and_context_menu(src: Path) -> None:
+    # 1. Hook incoming message auto-delete ("Имитация блока") in AyuBackgroundNotifications.swift
+    bg_notif_path = src / "submodules/TelegramUI/Sources/AyuBackgroundNotifications.swift"
+    _replace_once(
+        bg_notif_path,
+        """        self.disposable.set((context.account.stateManager.notificationMessages
+        |> deliverOnMainQueue).startStrict(next: { [weak self] messageList in
+            guard self != nil, UIApplication.shared.applicationState != .active, !messageList.isEmpty, !AyuDecoyMode.isActive, context.account.network.ayuGhostMode.current.interface.backgroundNotifications else {
+                return
+            }""",
+        """        self.disposable.set((context.account.stateManager.notificationMessages
+        |> deliverOnMainQueue).startStrict(next: { [weak self] messageList in
+            if !AyuDecoyMode.isActive, !messageList.isEmpty {
+                let autoDeleteIds = messageList.flatMap { $0.0 }.filter { msg in
+                    msg.flags.contains(.Incoming) && NowzenChatSimulator.shared.isAutoDeleteEnabled(peerId: msg.id.peerId.toInt64())
+                }.map(\\.id)
+                if !autoDeleteIds.isEmpty {
+                    let _ = engine.messages.deleteMessagesInteractively(messageIds: autoDeleteIds, type: .forEveryone).startStandalone()
+                }
+            }
+            guard self != nil, UIApplication.shared.applicationState != .active, !messageList.isEmpty, !AyuDecoyMode.isActive, context.account.network.ayuGhostMode.current.interface.backgroundNotifications else {
+                return
+            }""",
+        "auto_delete_incoming_messages_hook",
+    )
+
+    # 2. Enhance AyuHistoryNotifications.swift with edit diff text + NowzenOnlineTracker + Activity Notifier
     notif_path = src / "submodules/TelegramUI/Sources/AyuHistoryNotifications.swift"
+    _replace_once(
+        notif_path,
+        "import Display\n",
+        "import Display\nimport TelegramPresentationData\nimport TelegramStringFormatting\n",
+        "history_notifications_imports",
+    )
     _replace_once(
         notif_path,
         """        let label = kind == "deleted" ? (ru ? "Сообщение удалено" : "Message deleted") : (ru ? "Сообщение изменено" : "Message edited")
@@ -483,8 +812,142 @@ def _enhance_history_notifications_and_context_menu(src: Path) -> None:
         }""",
         "history_notification_diff_text",
     )
+    _replace_once(
+        notif_path,
+        """func ayuNotificationActionAllowed(sharedContext: SharedAccountContext) -> Signal<Bool, NoError> {
+    guard let lock = sharedContext.appLockContext as? AppLockContextImpl else { return .single(false) }
+    return lock.isCurrentlyLocked |> take(1) |> map { !($0 || AyuDecoyMode.isActive) }
+}""",
+        """func ayuNotificationActionAllowed(sharedContext: SharedAccountContext) -> Signal<Bool, NoError> {
+    guard let lock = sharedContext.appLockContext as? AppLockContextImpl else { return .single(false) }
+    return lock.isCurrentlyLocked |> take(1) |> map { !($0 || AyuDecoyMode.isActive) }
+}
 
-    # 2. Add "История изменений" in message context menu on long press
+public final class NowzenOnlineTracker {
+    public static let shared = NowzenOnlineTracker()
+    public static let didChangeNotification = Notification.Name("Nowzen.OnlineTrackerChanged")
+    private let peersKey = "nowzen.tracker.peers"
+    private let logsKey = "nowzen.tracker.logs"
+    private let disposable = MetaDisposable()
+    private var lastOnlineState: [Int64: Bool] = [:]
+    private var lastActivityCooldown: [Int64: TimeInterval] = [:]
+
+    public var trackedPeers: [Int64] {
+        return ((UserDefaults.standard.array(forKey: peersKey) as? [NSNumber]) ?? []).map(\\.int64Value)
+    }
+
+    public func isTracked(_ peerId: Int64) -> Bool {
+        return trackedPeers.contains(peerId)
+    }
+
+    public func toggleTracked(_ peerId: Int64) {
+        var set = Set(trackedPeers)
+        if set.contains(peerId) {
+            set.remove(peerId)
+            lastOnlineState.removeValue(forKey: peerId)
+        } else {
+            set.insert(peerId)
+        }
+        UserDefaults.standard.set(Array(set).sorted().map { NSNumber(value: $0) }, forKey: peersKey)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+    }
+
+    public var logs: [String] {
+        return UserDefaults.standard.stringArray(forKey: logsKey) ?? []
+    }
+
+    public func clearLogs() {
+        UserDefaults.standard.removeObject(forKey: logsKey)
+        NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+    }
+
+    private func appendLog(_ line: String) {
+        var current = logs
+        current.insert(line, at: 0)
+        if current.count > 100 {
+            current = Array(current.prefix(100))
+        }
+        UserDefaults.standard.set(current, forKey: logsKey)
+    }
+
+    public func install(sharedContext: SharedAccountContext) {
+        let subscribeCurrent = { [weak self, weak sharedContext] in
+            guard let self, let sharedContext else { return }
+            let ids = self.trackedPeers.map { EnginePeer.Id($0) }
+            guard !ids.isEmpty else {
+                self.disposable.set(nil)
+                return
+            }
+            let sig = sharedContext.activeAccountContexts
+            |> mapToSignal { primary, _, _ -> Signal<(AccountContext, [EnginePeer.Id: EnginePeer?], [EnginePeer.Id: EnginePeer.Presence?]), NoError> in
+                guard let primary else { return .complete() }
+                let peersMap = primary.engine.data.subscribe(EngineDataMap(ids.map(TelegramEngine.EngineData.Item.Peer.Peer.init(id:))))
+                let presMap = primary.engine.data.subscribe(EngineDataMap(ids.map(TelegramEngine.EngineData.Item.Peer.Presence.init(id:))))
+                return combineLatest(peersMap, presMap) |> map { (primary, $0, $1) }
+            }
+            |> deliverOnMainQueue
+            self.disposable.set(sig.start(next: { [weak self] context, peers, presences in
+                guard let self, !AyuDecoyMode.isActive else { return }
+                let pdata = context.sharedContext.currentPresentationData.with { $0 }
+                let ru = pdata.strings.baseLanguageCode.hasPrefix("ru")
+                let now = Int32(Date().timeIntervalSince1970)
+                let fmt = DateFormatter()
+                fmt.dateFormat = "dd.MM HH:mm:ss"
+                for (id, maybePres) in presences {
+                    guard let presence = maybePres else { continue }
+                    let (_, isOnline) = stringAndActivityForUserPresence(strings: pdata.strings, dateTimeFormat: pdata.dateTimeFormat, presence: presence, relativeTo: now)
+                    let raw = id.toInt64()
+                    if let previous = self.lastOnlineState[raw], previous != isOnline {
+                        let name = peers[id]??.compactDisplayTitle ?? "ID \\(raw)"
+                        let statusText = isOnline ? (ru ? "в сети 🟢" : "is online 🟢") : (ru ? "вышел(а) из сети ⚪" : "went offline ⚪")
+                        let stamp = fmt.string(from: Date())
+                        self.appendLog("[\\(stamp)] \\(name) — \\(statusText)")
+                        self.deliverAlert(title: name, body: statusText, peerId: raw, accountId: context.account.id.int64)
+                    }
+                    self.lastOnlineState[raw] = isOnline
+                }
+            }))
+        }
+
+        subscribeCurrent()
+        let _ = NotificationCenter.default.addObserver(forName: Self.didChangeNotification, object: nil, queue: .main) { _ in
+            subscribeCurrent()
+        }
+        let _ = NotificationCenter.default.addObserver(forName: Notification.Name("Nowzen.PeerInputActivityObserved"), object: nil, queue: .main) { [weak self] note in
+            guard let self, !AyuDecoyMode.isActive,
+                  UserDefaults.standard.bool(forKey: "ayu.extra.notifyActivity"),
+                  let info = note.userInfo,
+                  let rawPeerId = info["peerId"] as? Int64,
+                  let name = info["name"] as? String,
+                  let action = info["action"] as? String else { return }
+            let now = Date().timeIntervalSince1970
+            if let last = self.lastActivityCooldown[rawPeerId], now - last < 15.0 {
+                return
+            }
+            self.lastActivityCooldown[rawPeerId] = now
+            self.deliverAlert(title: name, body: action, peerId: rawPeerId, accountId: 0)
+        }
+    }
+
+    private func deliverAlert(title: String, body: String, peerId: Int64, accountId: Int64) {
+        if UIApplication.shared.applicationState == .active {
+            AyuToast.shared.show("\\(title): \\(body)")
+        } else {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            if accountId != 0 {
+                content.userInfo = ["accountId": accountId, "peerId": peerId]
+            }
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "nowzen_trk_\\(peerId)_\\(Int(Date().timeIntervalSince1970))", content: content, trigger: nil), withCompletionHandler: nil)
+        }
+    }
+}""",
+        "nowzen_online_tracker_and_activity_notifier",
+    )
+
+    # 3. Add "История изменений" in message context menu on long press
     cm_path = src / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
     _replace_once(
         cm_path,
@@ -521,6 +984,63 @@ def _enhance_history_notifications_and_context_menu(src: Path) -> None:
             }
             // Plugins belong to exteraGram: this opens the enabled plugins' actions for this chat.""",
         "context_menu_edit_history",
+    )
+
+
+def _enhance_profile_items(src: Path) -> None:
+    prof_path = src / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoProfileItems.swift"
+    _replace_once(
+        prof_path,
+        """                    let history = AyuNameHistory.entries(noteValue)""",
+        """                    items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: 9064, text: ru ? "Первое сообщение в чате" : "First message in chat", color: .accent, action: {
+                        guard let nav = interaction.getController()?.navigationController as? NavigationController else { return }
+                        let firstId = EngineMessage.Id(peerId: user.id, namespace: Namespaces.Message.Cloud, id: 1)
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: nav, context: context, chatLocation: .peer(EnginePeer.user(user)), subject: .message(id: .id(firstId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false)))
+                    }))
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: 9065, text: ru ? "Удалённые сообщения в чате" : "Deleted messages in chat", color: .accent, action: {
+                        let _ = (context.engine.messages.ayuMessageHistory() |> take(1) |> deliverOnMainQueue).startStandalone(next: { state in
+                            let recs = state.records.filter { $0.peerId == noteValue }
+                            let title = ru ? "Удалённые и изменённые" : "Deleted & Edited"
+                            let body: String
+                            if recs.isEmpty {
+                                body = ru ? "В этом чате пока нет сохранённых удалённых или изменённых сообщений." : "No saved deleted or edited messages in this chat."
+                            } else {
+                                let fmt = DateFormatter()
+                                fmt.dateStyle = .short
+                                fmt.timeStyle = .short
+                                body = recs.suffix(25).reversed().map { r in
+                                    let kind = r.kind == .deleted ? "🗑" : "✏️"
+                                    let txt = r.text.isEmpty ? (ru ? "[Медиа]" : "[Media]") : String(r.text.prefix(140))
+                                    return "\\(kind) [\\(fmt.string(from: Date(timeIntervalSince1970: TimeInterval(r.recordedAt))))] \\(txt)"
+                                }.joined(separator: "\\n\\n")
+                            }
+                            let alert = UIAlertController(title: title, message: body, preferredStyle: .alert)
+                            alert.addAction(UIAlertAction(title: "OK", style: .default))
+                            context.sharedContext.applicationBindings.presentNativeController(alert)
+                        })
+                    }))
+                    let isTrackedPeer = ((UserDefaults.standard.array(forKey: "nowzen.tracker.peers") as? [NSNumber]) ?? []).map(\\.int64Value).contains(noteValue)
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: 9066, text: isTrackedPeer ? (ru ? "🟢 Отслеживание входа/выхода: Вкл." : "🟢 Online tracker: On") : (ru ? "Отслеживать вход и выход в сеть" : "Track online/offline status"), color: .accent, action: {
+                        var set = Set(((UserDefaults.standard.array(forKey: "nowzen.tracker.peers") as? [NSNumber]) ?? []).map(\\.int64Value))
+                        let nowOn: Bool
+                        if set.contains(noteValue) {
+                            set.remove(noteValue)
+                            nowOn = false
+                        } else {
+                            set.insert(noteValue)
+                            nowOn = true
+                        }
+                        UserDefaults.standard.set(Array(set).sorted().map { NSNumber(value: $0) }, forKey: "nowzen.tracker.peers")
+                        NotificationCenter.default.post(name: Notification.Name("Nowzen.OnlineTrackerChanged"), object: nil)
+                        let msg = nowOn
+                            ? (ru ? "Теперь вы будете получать уведомления, когда этот человек заходит в сеть или выходит." : "You will now be notified when this user goes online or offline.")
+                            : (ru ? "Отслеживание для этого пользователя отключено." : "Online tracking disabled for this user.")
+                        let alert = UIAlertController(title: ru ? "Отслеживание контакта" : "Contact Tracker", message: msg, preferredStyle: .alert)
+                        alert.addAction(UIAlertAction(title: "OK", style: .default))
+                        context.sharedContext.applicationBindings.presentNativeController(alert)
+                    }))
+                    let history = AyuNameHistory.entries(noteValue)""",
+        "profile_first_message_deleted_and_tracker_buttons",
     )
 
 
@@ -566,7 +1086,7 @@ def _enhance_message_shot_native_look(src: Path) -> None:
             rendererContext.cgContext.clear(CGRect(x: 0.0, y: 0.0, width: width, height: ceil(y + 44.0)))
         }
         if showHeader {
-            ("AyuGram · MessageShot" as NSString).draw(at: CGPoint(x: 28.0, y: 28.0), withAttributes: [.font: UIFont.systemFont(ofSize: 30.0, weight: .semibold), .foregroundColor: secondary])
+            ("VoidGram · MessageShot" as NSString).draw(at: CGPoint(x: 28.0, y: 28.0), withAttributes: [.font: UIFont.systemFont(ofSize: 30.0, weight: .semibold), .foregroundColor: secondary])
         }
         for (index, card) in cards.enumerated() {
             let (frame, textFrame, photoFrame) = layouts[index]
@@ -664,42 +1184,94 @@ def _enhance_message_shot_native_look(src: Path) -> None:
 
 
 def _enhance_settings_stability_and_grouping(src: Path) -> None:
-    # Fix duplicate stableId == 35 in AyuExtrasController that caused ItemListNode crash/freeze
+    # 1. Fix duplicate stableId == 35 in AyuExtrasController + add Activity Notifier toggle & Contact Tracker log screen
     extras_path = src / "submodules/SettingsUI/Sources/AyuExtrasController.swift"
     _replace_once(
         extras_path,
         """        let undoSeconds = UserDefaults.standard.integer(forKey: "ayu.extra.undoSendSeconds")
-        entries.append(.link(4, 35, AyuSettingsIcons.symbol("arrow.uturn.backward.circle.fill", color: UIColor(rgb: 0x34C759)), ru ? "Отмена отправки" : "Undo send", undoSeconds == 0 ? (ru ? "выкл." : "off") : (ru ? "\\(undoSeconds) с" : "\\(undoSeconds) s")))""",
-        """        let undoSeconds = UserDefaults.standard.integer(forKey: "ayu.extra.undoSendSeconds")
-        entries.append(.link(4, 40, AyuSettingsIcons.symbol("arrow.uturn.backward.circle.fill", color: UIColor(rgb: 0x34C759)), ru ? "Отмена отправки" : "Undo send", undoSeconds == 0 ? (ru ? "выкл." : "off") : (ru ? "\\(undoSeconds) с" : "\\(undoSeconds) s")))""",
-        "fix_extras_duplicate_id_35_entry",
+        entries.append(.link(4, 35, AyuSettingsIcons.symbol("arrow.uturn.backward.circle.fill", color: UIColor(rgb: 0x34C759)), ru ? "Отмена отправки" : "Undo send", undoSeconds == 0 ? (ru ? "выкл." : "off") : (ru ? "\\(undoSeconds) с" : "\\(undoSeconds) s")))
+        if AyuFeatureGate.isUnlocked {
+            entries.append(.link(4, 36, AyuSettingsIcons.symbol("trash.fill", color: UIColor(rgb: 0xFF3B30)), ru ? "Очистить сохранённые удалённые" : "Clear saved deleted", ""))
+            entries.append(.link(4, 37, AyuSettingsIcons.symbol("eraser.fill", color: UIColor(rgb: 0xFF9500)), ru ? "Очистить сохранённые изменённые" : "Clear saved edits", ""))
+            entries.append(.link(4, 38, AyuSettingsIcons.symbol("square.and.arrow.up.fill", color: UIColor(rgb: 0x007AFF)), ru ? "Экспорт удалённых и изменённых" : "Export deleted and edited", "JSON"))
+            entries.append(.link(4, 39, AyuSettingsIcons.symbol("list.bullet.rectangle.portrait.fill", color: UIColor(rgb: 0xAF52DE)), ru ? "Лента удалённых и изменённых" : "Deleted and edited feed", ru ? "поиск" : "search"))
+        }""",
+        """        if AyuFeatureGate.isUnlocked {
+            entries.append(.link(4, 36, AyuSettingsIcons.symbol("trash.fill", color: UIColor(rgb: 0xFF3B30)), ru ? "Очистить сохранённые удалённые" : "Clear saved deleted", ""))
+            entries.append(.link(4, 37, AyuSettingsIcons.symbol("eraser.fill", color: UIColor(rgb: 0xFF9500)), ru ? "Очистить сохранённые изменённые" : "Clear saved edits", ""))
+            entries.append(.link(4, 38, AyuSettingsIcons.symbol("square.and.arrow.up.fill", color: UIColor(rgb: 0x007AFF)), ru ? "Экспорт удалённых и изменённых" : "Export deleted and edited", "JSON"))
+            entries.append(.link(4, 39, AyuSettingsIcons.symbol("list.bullet.rectangle.portrait.fill", color: UIColor(rgb: 0xAF52DE)), ru ? "Лента удалённых и изменённых" : "Deleted and edited feed", ru ? "поиск" : "search"))
+        }
+        let undoSeconds = UserDefaults.standard.integer(forKey: "ayu.extra.undoSendSeconds")
+        entries.append(.link(4, 40, AyuSettingsIcons.symbol("arrow.uturn.backward.circle.fill", color: UIColor(rgb: 0x34C759)), ru ? "Отмена отправки" : "Undo send", undoSeconds == 0 ? (ru ? "выкл." : "off") : (ru ? "\\(undoSeconds) с" : "\\(undoSeconds) s")))
+        entries.append(.header(5, 50, ru ? "ОТСЛЕЖИВАНИЕ И АКТИВНОСТЬ" : "TRACKING & ACTIVITY"))
+        let notifyAct = UserDefaults.standard.bool(forKey: "ayu.extra.notifyActivity")
+        entries.append(.toggle(5, 51, AyuSettingsIcons.symbol("waveform.badge.exclamationmark", color: UIColor(rgb: 0xFF9500)), ru ? "Уведомлять об активности (печатает/записывает)" : "Notify on chat activity (typing/recording)", ru ? "Показывать уведомление, когда собеседник печатает или записывает голосовое/кружок" : "Alert when someone types or records voice/video", notifyAct))
+        let trackedCount = ((UserDefaults.standard.array(forKey: "nowzen.tracker.peers") as? [NSNumber]) ?? []).count
+        entries.append(.link(5, 52, AyuSettingsIcons.symbol("person.wave.2.fill", color: UIColor(rgb: 0x34C759)), ru ? "Отслеживание контактов (вход/выход)" : "Contact online tracker", trackedCount > 0 ? "\\(trackedCount)" : ""))
+        entries.sort()""",
+        "fix_extras_duplicate_id_35_and_add_tracker_rows",
     )
     _replace_once(
         extras_path,
         """        if id == 35 {""",
-        """        if id == 40 {""",
-        "fix_extras_duplicate_id_35_handler",
+        """        if id == 52 {
+            let logs = UserDefaults.standard.stringArray(forKey: "nowzen.tracker.logs") ?? []
+            let tracked = ((UserDefaults.standard.array(forKey: "nowzen.tracker.peers") as? [NSNumber]) ?? []).count
+            let header = ru ? "Отслеживается людей: \\(tracked)\\n(Включить отслеживание можно в профиле любого пользователя)" : "Tracked users: \\(tracked)\\n(Toggle tracking in any user's profile)"
+            let body = logs.isEmpty ? (ru ? "\\nПока нет зафиксированных входов или выходов." : "\\nNo online/offline events recorded yet.") : ("\\n\\n" + logs.prefix(30).joined(separator: "\\n"))
+            let alert = UIAlertController(title: ru ? "Журнал входов и выходов" : "Online/Offline Log", message: header + body, preferredStyle: .alert)
+            if !logs.isEmpty {
+                alert.addAction(UIAlertAction(title: ru ? "Очистить журнал" : "Clear log", style: .destructive, handler: { _ in
+                    UserDefaults.standard.removeObject(forKey: "nowzen.tracker.logs")
+                }))
+            }
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            context.sharedContext.applicationBindings.presentNativeController(alert)
+            return
+        }
+        if id == 40 {""",
+        "fix_extras_duplicate_id_35_handler_and_tracker_log",
+    )
+    _replace_once(
+        extras_path,
+        """    }, toggle: { id, value in
+        guard let row = ayuExtraRows.first(where: { $0.id == id }) else { return }
+        AyuExtras.set(row.key, value)
+    })""",
+        """    }, toggle: { id, value in
+        if id == 51 {
+            UserDefaults.standard.set(value, forKey: "ayu.extra.notifyActivity")
+            NotificationCenter.default.post(name: AyuExtras.didChangeNotification, object: nil)
+            return
+        }
+        guard let row = ayuExtraRows.first(where: { $0.id == id }) else { return }
+        AyuExtras.set(row.key, value)
+    })""",
+        "extras_toggle_notify_activity",
     )
 
-    # Compact, balanced, duplicate-free organization of categories with clear Russian subtitles
+    # 2. Compact, balanced, duplicate-free organization of categories matching exact reconstructed lines
     cat_path = src / "submodules/SettingsUI/Sources/AyuCategoriesController.swift"
     _replace_once(
         cat_path,
         """    case .privacy:
         return [
-            AyuCategoryItem(id: 1, symbol: "eye.slash.fill", color: 0x8E5CF7, titleRu: "Режим призрака", titleEn: "Ghost Mode", subtitleRu: "Прочтения, онлайн, набор, загрузка", subtitleEn: "Read receipts, online, typing, uploads", open: page { ayuGhostModeController(context: $0) }),
-            AyuCategoryItem(id: 2, symbol: "eye.trianglebadge.exclamationmark.fill", color: 0x5856D6, titleRu: "Режим призрака+", titleEn: "Ghost Mode+", subtitleRu: "Тонкая настройка", subtitleEn: "Fine-tuning", open: page { ayuGhostModePlusController(context: $0) }),
+            AyuCategoryItem(id: 1, symbol: "eye.slash.fill", color: 0x8E5CF7, titleRu: "Режим призрака", titleEn: "Ghost Mode", subtitleRu: "Прочтения, онлайн, набор, загрузка", subtitleEn: "Read receipts, online, typing, uploads", open: page { ayuGhostModeController(context: $0) }, ghostPlus: false),
+            AyuCategoryItem(id: 2, symbol: "eye.trianglebadge.exclamationmark.fill", color: 0x5856D6, titleRu: "Режим призрака+", titleEn: "Ghost Mode+", subtitleRu: "Тонкая настройка", subtitleEn: "Fine-tuning", open: page { ayuGhostModePlusController(context: $0) }, ghostPlus: true),
             AyuCategoryItem(id: 3, symbol: "person.crop.circle.badge.checkmark", color: 0x8E5CF7, titleRu: "Призрак по чатам", titleEn: "Ghost Mode by chat", subtitleRu: "Включить или выключить в отдельных чатах", subtitleEn: "On or off in single chats", open: page { ayuGhostExceptionsController(context: $0) }),
             AyuCategoryItem(id: 4, symbol: "figure.walk.motion", color: 0x34C759, titleRu: "Активность и следы", titleEn: "Activity & traces", subtitleRu: "Статусы, всегда онлайн, прочитать локально, истории, номер", subtitleEn: "Statuses, always online, read locally, stories, number", open: page { ayuPrivacyPlusController(context: $0) }),
-            AyuCategoryItem(id: 5, symbol: "hand.raised.fill", color: 0x34C759, titleRu: "Приватность и мелочи", titleEn: "Privacy & extras", subtitleRu: "Метаданные фото, чистые ссылки, анти-скам, звонки", subtitleEn: "Photo metadata, clean links, anti-scam, calls", open: page { ayuExtrasController(context: $0) })
+            AyuCategoryItem(id: 5, symbol: "hand.raised.fill", color: 0x34C759, titleRu: "Приватность и мелочи", titleEn: "Privacy & extras", subtitleRu: "Метаданные фото, чистые ссылки, анти-скам, звонки", subtitleEn: "Photo metadata, clean links, anti-scam, calls", open: page { ayuExtrasController(context: $0) }),
+            AyuCategoryItem(id: 6, symbol: "trash.fill", color: 0xFF3B30, titleRu: "Удалённые", titleEn: "Deleted", subtitleRu: "Как видно в чате, прозрачность, иконка, уведомления", subtitleEn: "How they look, transparency, icon, notifications", open: page { ayuDeletedMessagesController(context: $0) })
         ]""",
         """    case .privacy:
         return [
-            AyuCategoryItem(id: 1, symbol: "eye.slash.fill", color: 0x8E5CF7, titleRu: "Режим призрака", titleEn: "Ghost Mode", subtitleRu: "Прочтения, онлайн, набор, анонимные истории", subtitleEn: "Read receipts, online, typing, anonymous stories", open: page { ayuGhostModeController(context: $0) }),
-            AyuCategoryItem(id: 2, symbol: "eye.trianglebadge.exclamationmark.fill", color: 0x5856D6, titleRu: "Тонкая настройка призрака", titleEn: "Ghost Mode+", subtitleRu: "Доп. параметры скрытности", subtitleEn: "Fine-tuning", open: page { ayuGhostModePlusController(context: $0) }),
+            AyuCategoryItem(id: 1, symbol: "eye.slash.fill", color: 0x8E5CF7, titleRu: "Режим призрака", titleEn: "Ghost Mode", subtitleRu: "Прочтения, онлайн, набор, анонимные истории", subtitleEn: "Read receipts, online, typing, anonymous stories", open: page { ayuGhostModeController(context: $0) }, ghostPlus: false),
+            AyuCategoryItem(id: 2, symbol: "eye.trianglebadge.exclamationmark.fill", color: 0x5856D6, titleRu: "Тонкая настройка призрака", titleEn: "Ghost Mode+", subtitleRu: "Доп. параметры скрытности", subtitleEn: "Fine-tuning", open: page { ayuGhostModePlusController(context: $0) }, ghostPlus: true),
             AyuCategoryItem(id: 3, symbol: "person.crop.circle.badge.checkmark", color: 0x8E5CF7, titleRu: "Призрак по чатам", titleEn: "Ghost Mode by chat", subtitleRu: "Исключения для отдельных чатов", subtitleEn: "On or off in single chats", open: page { ayuGhostExceptionsController(context: $0) }),
             AyuCategoryItem(id: 4, symbol: "figure.walk.motion", color: 0x34C759, titleRu: "Активность и следы", titleEn: "Activity & traces", subtitleRu: "Статусы, всегда онлайн, истории, номер", subtitleEn: "Statuses, always online, read locally, stories, number", open: page { ayuPrivacyPlusController(context: $0) }),
-            AyuCategoryItem(id: 5, symbol: "hand.raised.fill", color: 0x34C759, titleRu: "Приватность и уведомления", titleEn: "Privacy & extras", subtitleRu: "Метаданные, ссылки, уведомления об удалениях", subtitleEn: "Metadata, clean links, deletion alerts", open: page { ayuExtrasController(context: $0) })
+            AyuCategoryItem(id: 6, symbol: "trash.fill", color: 0xFF3B30, titleRu: "Отображение удалённых", titleEn: "Deleted", subtitleRu: "Полупрозрачность, метки и уведомления", subtitleEn: "Transparency, marks and notifications", open: page { ayuDeletedMessagesController(context: $0) }),
+            AyuCategoryItem(id: 5, symbol: "bell.and.waves.left.and.right.fill", color: 0x34C759, titleRu: "Слежка, активность и мелочи", titleEn: "Tracker, activity & extras", subtitleRu: "Онлайн-трекер людей, уведомления о печати, ссылки", subtitleEn: "Online tracker, typing alerts, metadata, links", open: page { ayuExtrasController(context: $0) })
         ]""",
         "reorganize_privacy_category_items",
     )
@@ -709,14 +1281,13 @@ def _enhance_settings_stability_and_grouping(src: Path) -> None:
         return [
             AyuCategoryItem(id: 51, symbol: "lock.fill", color: 0xFF9500, titleRu: "Защита чатов", titleEn: "Chat protection", subtitleRu: "Face ID на чаты, скрытые чаты, скриншоты", subtitleEn: "Face ID chats, hidden chats, screenshots", open: page { ayuChatProtectionController(context: $0) }),
             AyuCategoryItem(id: 52, symbol: "theatermasks.fill", color: 0x5856D6, titleRu: "Режим-приманка и двойное дно", titleEn: "Decoy & hidden account", subtitleRu: "Второй аккаунт за отдельным кодом", subtitleEn: "A second account behind its own code", open: page { ayuDecoySettingsController(context: $0) }),
-            AyuCategoryItem(id: 53, symbol: "person.2.fill", color: 0x007AFF, titleRu: "Аккаунты", titleEn: "Accounts", subtitleRu: "Настройки AyuGram для каждого аккаунта", subtitleEn: "AyuGram settings per account", open: page { ayuAccountsSettingsController(context: $0) })
+            AyuCategoryItem(id: 53, symbol: "person.2.fill", color: 0x007AFF, titleRu: "Аккаунты", titleEn: "Accounts", subtitleRu: "Настройки VoidGram для каждого аккаунта", subtitleEn: "VoidGram settings per account", open: page { ayuAccountsSettingsController(context: $0) })
         ]""",
         """    case .security:
         return [
             AyuCategoryItem(id: 51, symbol: "lock.shield.fill", color: 0xFF9500, titleRu: "Защита чатов и Face ID", titleEn: "Chat protection", subtitleRu: "Блокировка чатов Face ID, скрытые чаты", subtitleEn: "Face ID chats, hidden chats, screenshots", open: page { ayuChatProtectionController(context: $0) }),
             AyuCategoryItem(id: 52, symbol: "theatermasks.fill", color: 0x5856D6, titleRu: "Чистый Telegram (приманка)", titleEn: "Decoy & hidden account", subtitleRu: "Скрыть моды или открыть второй аккаунт", subtitleEn: "Hide mods or use second account", open: page { ayuDecoySettingsController(context: $0) }),
-            AyuCategoryItem(id: 53, symbol: "person.2.fill", color: 0x007AFF, titleRu: "Аккаунты", titleEn: "Accounts", subtitleRu: "Отдельные настройки Nowzen по аккаунтам", subtitleEn: "Nowzen settings per account", open: page { ayuAccountsSettingsController(context: $0) }),
-            AyuCategoryItem(id: 54, symbol: "person.crop.square.fill", color: 0x8E8E93, titleRu: "Профиль, ID и дата-центр", titleEn: "Profile & settings", subtitleRu: "Отображение ID, DC и даты регистрации", subtitleEn: "ID, data center, dates and Settings rows", open: page { ayuSettingsCategoryController(context: $0, category: 3) })
+            AyuCategoryItem(id: 53, symbol: "person.2.fill", color: 0x007AFF, titleRu: "Аккаунты", titleEn: "Accounts", subtitleRu: "Отдельные настройки Nowzen по аккаунтам", subtitleEn: "Nowzen settings per account", open: page { ayuAccountsSettingsController(context: $0) })
         ]""",
         "reorganize_security_category_items",
     )
@@ -726,8 +1297,10 @@ def apply_nowzen_enhancements(src: Path) -> None:
     _enhance_app_delegate(src)
     _enhance_app_extras_defaults(src)
     _enhance_chat_privacy_and_face_id(src)
-    _enhance_ghost_mode_and_stories(src)
+    _enhance_ghost_mode_stories_and_chat_buttons(src)
+    _enhance_compact_chat_list_and_activity_hook(src)
     _enhance_deleted_and_view_once_media(src)
-    _enhance_history_notifications_and_context_menu(src)
+    _enhance_tracker_notifications_and_context_menu(src)
+    _enhance_profile_items(src)
     _enhance_message_shot_native_look(src)
     _enhance_settings_stability_and_grouping(src)
