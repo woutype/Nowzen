@@ -18,11 +18,11 @@
       "versions": [
         {
           "version": "13.1.1",
-          "buildVersion": "6",
-          "date": "2026-11-27T18:46:24Z",
-          "localizedDescription": "Nowzen 13.1.1 (build 6)",
-          "downloadURL": "https://github.com/woutype/Nowzen/releases/download/v13.1.1-b6/Nowzen-v13.1.1-b6.ipa",
-          "size": 106627446,
+          "buildVersion": "11",
+          "date": "2026-11-27T21:33:46Z",
+          "localizedDescription": "Nowzen 13.1.1 (build 11)",
+          "downloadURL": "https://github.com/woutype/Nowzen/releases/download/v13.1.1-b11/Nowzen-v13.1.1-b11.ipa",
+          "size": 214641555,
           "minOSVersion": "15.0"
         }
       ],
