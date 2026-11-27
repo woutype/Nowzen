@@ -108,7 +108,8 @@ index ca4767b5..55377cf6 100644
 +            let _ = (self.suggestedLocalization.get()
 +            |> take(1)
 +            |> deliverOnMainQueue).start(next: { [weak self] localization in
-+                self?.activateLocalization(localization?.availableLocalizations.first?.languageCode ?? "en")
++                let fallback = Locale.preferredLanguages.first?.hasPrefix("ru") == true ? "ru" : "en"
++                self?.activateLocalization(localization?.availableLocalizations.first?.languageCode ?? fallback)
 +            })
          }
      }
