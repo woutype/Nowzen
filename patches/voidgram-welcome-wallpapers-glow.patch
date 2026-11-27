@@ -304,9 +304,9 @@ index 00000000..11a6fcbf
 +            layer.endPoint = CGPoint(x: 1.0, y: 1.0)
 +            self.layer.addSublayer(layer)
 +        }
-+        self.lightLayer.colors = [UIColor(white: 1.0, alpha: 0.26).cgColor, UIColor(white: 1.0, alpha: 0.08).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor]
-+        self.lightLayer.locations = [0.0, 0.5, 1.0]
-+        self.logoLightLayer.colors = [UIColor(white: 1.0, alpha: 0.42).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor]
++        self.lightLayer.isHidden = true
++        self.lightLayer.colors = [UIColor.clear.cgColor, UIColor.clear.cgColor]
++        self.logoLightLayer.colors = [UIColor(white: 1.0, alpha: 0.08).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor]
 +
 +        self.logoView.image = Bundle.main.path(forResource: "VoidGramWelcomeLogo@3x", ofType: "png").flatMap(UIImage.init(contentsOfFile:)).flatMap { image -> UIImage? in
 +            return image.cgImage.map { UIImage(cgImage: $0, scale: 3.0, orientation: .up) }

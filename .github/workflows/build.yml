@@ -3,6 +3,8 @@ name: Nowzen iOS Build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'altstore/source.json'
   workflow_dispatch:
     inputs:
       configuration:
@@ -16,7 +18,7 @@ on:
         default: true
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   attestations: write
 
@@ -143,6 +145,42 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: telegram/artifacts/port/*.ipa
+
+      - name: Publish release and update AltStore source
+        if: success() && env.CONFIGURATION == 'release_arm64' && (github.event_name == 'push' || inputs.native_build) && hashFiles('telegram/artifacts/port/Nowzen.ipa') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APP_VERSION=$(python3 - <<'PY'
+          import plistlib, zipfile
+          with zipfile.ZipFile("telegram/artifacts/port/Nowzen.ipa") as zf:
+              info = plistlib.loads(zf.read("Payload/Telegram.app/Info.plist"))
+          print(info.get("CFBundleShortVersionString", "1.0.0"))
+          PY
+          )
+          TAG="v${APP_VERSION}-b${GITHUB_RUN_NUMBER}"
+          IPA_FILE="Nowzen-${TAG}.ipa"
+          cp "telegram/artifacts/port/Nowzen.ipa" "$IPA_FILE"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IPA_FILE" --clobber
+          else
+            gh release create "$TAG" "$IPA_FILE" \
+              --target "$GITHUB_SHA" \
+              --title "Nowzen ${APP_VERSION} (build ${GITHUB_RUN_NUMBER})" \
+              --notes "Automated build #${GITHUB_RUN_NUMBER} from \`${GITHUB_SHA}\`." \
+              --latest
+          fi
+          node altstore/update-source.mjs "$APP_VERSION" "$GITHUB_RUN_NUMBER" "$TAG" "$IPA_FILE" "Nowzen ${APP_VERSION} (build ${GITHUB_RUN_NUMBER})"
+          rm -f "$IPA_FILE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add altstore/source.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update AltStore source for ${TAG} [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - name: Free disk space
         if: always()
